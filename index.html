@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fire Breath</title>
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0b0907;
+      --warm: #d4924a;
+      --warm-bright: #f0b870;
+      --warm-dim: #b07d3a;
+      --text-muted: #8a6030;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      font-family: 'Georgia', 'Times New Roman', serif;
+      color: var(--warm);
+      overflow: hidden;
+    }
+
+    /* ---- SCREENS ---- */
+    .screen {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 32px;
+      transition: opacity 0.9s ease;
+    }
+    .screen.hidden { opacity: 0; pointer-events: none; }
+
+    /* ---- SETUP ---- */
+    #screen-setup { gap: 28px; }
+
+    .app-title {
+      font-size: 2.2rem;
+      font-weight: 400;
+      letter-spacing: 0.45em;
+      color: var(--warm-bright);
+      opacity: 0.75;
+      margin-bottom: 4px;
+    }
+
+    .section-label {
+      font-size: 0.6rem;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 10px;
+      text-align: center;
+    }
+
+    .presets-grid {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 520px;
+    }
+
+    .preset-card {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(180,120,50,0.12);
+      border-radius: 10px;
+      padding: 14px 18px;
+      cursor: pointer;
+      transition: background 0.3s, border-color 0.3s;
+      text-align: center;
+      min-width: 120px;
+    }
+    .preset-card:hover { background: rgba(180,120,50,0.07); border-color: rgba(180,120,50,0.3); }
+    .preset-card.active { background: rgba(180,120,50,0.1); border-color: rgba(180,120,50,0.45); }
+
+    .preset-name { font-size: 0.88rem; color: var(--warm-bright); margin-bottom: 3px; }
+    .preset-timing { font-size: 0.68rem; font-family: monospace; color: var(--warm-dim); }
+    .preset-desc { font-size: 0.65rem; color: var(--text-muted); margin-top: 5px; font-style: italic; }
+
+    .custom-row {
+      display: flex;
+      gap: 14px;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .custom-row.collapsed { display: none; }
+
+    .phase-field { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+    .phase-field label { font-size: 0.58rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-muted); }
+    .phase-field input {
+      width: 52px; height: 52px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(180,120,50,0.2);
+      border-radius: 8px;
+      color: var(--warm-bright);
+      font-size: 1.4rem;
+      text-align: center;
+      font-family: Georgia, serif;
+    }
+    .phase-field input:focus { outline: none; border-color: rgba(180,120,50,0.5); }
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+    input[type=number] { -moz-appearance: textfield; }
+
+    .duration-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+      max-width: 480px;
+    }
+
+    .dur-btn {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid rgba(180,120,50,0.12);
+      border-radius: 20px;
+      padding: 7px 16px;
+      cursor: pointer;
+      font-size: 0.75rem;
+      color: var(--warm-dim);
+      font-family: Georgia, serif;
+      transition: background 0.3s, border-color 0.3s, color 0.3s;
+    }
+    .dur-btn:hover { background: rgba(180,120,50,0.07); color: var(--warm); }
+    .dur-btn.active { background: rgba(180,120,50,0.1); border-color: rgba(180,120,50,0.45); color: var(--warm-bright); }
+
+    .begin-btn {
+      background: transparent;
+      border: 1px solid rgba(180,120,50,0.35);
+      border-radius: 28px;
+      padding: 12px 44px;
+      color: var(--warm);
+      font-size: 0.85rem;
+      letter-spacing: 0.25em;
+      cursor: pointer;
+      font-family: Georgia, serif;
+      transition: background 0.4s, border-color 0.4s;
+      margin-top: 4px;
+    }
+    .begin-btn:hover { background: rgba(180,120,50,0.1); border-color: rgba(180,120,50,0.65); }
+    .begin-btn:disabled { opacity: 0.3; cursor: default; }
+
+    /* ---- SESSION ---- */
+    #screen-session { padding: 0; }
+
+    #c {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .session-ui {
+      position: absolute;
+      bottom: 36px;
+      display: flex;
+      gap: 28px;
+      align-items: center;
+      z-index: 10;
+    }
+
+    .ctrl {
+      background: none;
+      border: none;
+      color: rgba(180,120,50,0.22);
+      cursor: pointer;
+      font-size: 0.65rem;
+      letter-spacing: 0.18em;
+      text-transform: lowercase;
+      font-family: Georgia, serif;
+      padding: 6px;
+      transition: color 0.35s;
+    }
+    .ctrl:hover { color: rgba(180,120,50,0.65); }
+
+    .sound-toggle {
+      position: absolute;
+      top: 22px;
+      right: 26px;
+      background: none;
+      border: none;
+      color: rgba(180,120,50,0.18);
+      cursor: pointer;
+      font-size: 0.58rem;
+      letter-spacing: 0.15em;
+      font-family: Georgia, serif;
+      transition: color 0.3s;
+    }
+    .sound-toggle:hover { color: rgba(180,120,50,0.5); }
+
+    /* ---- COMPLETE ---- */
+    #screen-complete { gap: 20px; }
+    .done-msg { font-size: 1rem; letter-spacing: 0.3em; color: var(--warm); opacity: 0.5; }
+    .again-btn {
+      background: transparent;
+      border: 1px solid rgba(180,120,50,0.18);
+      border-radius: 20px;
+      padding: 9px 26px;
+      color: var(--text-muted);
+      font-size: 0.7rem;
+      letter-spacing: 0.18em;
+      cursor: pointer;
+      font-family: Georgia, serif;
+      transition: all 0.35s;
+    }
+    .again-btn:hover { border-color: rgba(180,120,50,0.4); color: var(--warm); }
+  </style>
+</head>
+<body>
+
+<!-- SETUP -->
+<div class="screen" id="screen-setup">
+  <h1 class="app-title">fire breath</h1>
+
+  <div>
+    <div class="section-label">pattern</div>
+    <div class="presets-grid" id="presets-grid"></div>
+  </div>
+
+  <div class="custom-row collapsed" id="custom-row">
+    <div class="phase-field"><label>Inhale</label><input type="number" id="ci" min="0" max="60" value="4"></div>
+    <div class="phase-field"><label>Hold</label><input type="number" id="ch1" min="0" max="60" value="4"></div>
+    <div class="phase-field"><label>Exhale</label><input type="number" id="ce" min="0" max="60" value="4"></div>
+    <div class="phase-field"><label>Hold</label><input type="number" id="ch2" min="0" max="60" value="4"></div>
+  </div>
+
+  <div>
+    <div class="section-label">duration</div>
+    <div class="duration-row" id="duration-row"></div>
+  </div>
+
+  <button class="begin-btn" id="begin-btn">begin</button>
+</div>
+
+<!-- SESSION -->
+<div class="screen hidden" id="screen-session">
+  <canvas id="c"></canvas>
+  <div class="session-ui">
+    <button class="ctrl" id="pause-btn">pause</button>
+    <button class="ctrl" id="stop-btn">stop</button>
+  </div>
+  <button class="sound-toggle" id="sound-btn">sound off</button>
+</div>
+
+<!-- COMPLETE -->
+<div class="screen hidden" id="screen-complete">
+  <p class="done-msg">well done</p>
+  <button class="again-btn" id="again-btn">again</button>
+</div>
+
+<script>
+'use strict';
+
+// ─── PRESETS ───────────────────────────────────────────────────────────────
+const PRESETS = [
+  { id: 'box',      name: 'Box Breathing',     p: [4,4,4,4], desc: 'Focus & composure' },
+  { id: 'relaxing', name: 'Relaxing Breath',   p: [4,7,8,0], desc: 'Calm anxiety, aid sleep' },
+  { id: 'energize', name: 'Energizing Breath', p: [6,0,6,0], desc: 'Gentle alertness' },
+  { id: 'custom',   name: 'Custom',            p: [4,4,4,4], desc: 'Your own rhythm' },
+];
+
+const DUR_TARGETS = [60, 120, 300, 600, 1800];
+const DUR_LABELS  = ['~1 min', '~2 min', '~5 min', '~10 min', '~30 min'];
+
+// ─── STATE ─────────────────────────────────────────────────────────────────
+let selPreset  = PRESETS[0];
+let selDurSec  = null;          // null = free
+let pattern    = [4,4,4,4];     // current [inhale,hold,exhale,hold]
+let soundOn    = false;
+
+// ─── ENGINE ────────────────────────────────────────────────────────────────
+class BreathEngine {
+  constructor(pat, totalSec) {
+    const names = ['inhale','holdTop','exhale','holdBottom'];
+    this.phases = pat
+      .map((d,i) => ({ name: names[i], durMs: d * 1000 }))
+      .filter(p => p.durMs > 0);
+    this.cycleLenMs = this.phases.reduce((a, p) => a + p.durMs, 0);
+    this.totalMs    = totalSec ? totalSec * 1000 : null;
+    this.startTs    = null;
+    this.pausedTs   = null;
+    this.pausedMs   = 0;
+    this.done       = false;
+    this.onDone     = null;
+  }
+
+  start()  { this.startTs = performance.now(); }
+  pause()  { if (!this.pausedTs) this.pausedTs = performance.now(); }
+  resume() {
+    if (this.pausedTs) { this.pausedMs += performance.now() - this.pausedTs; this.pausedTs = null; }
+  }
+  stop()   { this.done = true; }
+  get paused() { return this.pausedTs !== null; }
+
+  elapsedMs() {
+    if (!this.startTs) return 0;
+    const ref = this.pausedTs ?? performance.now();
+    return ref - this.startTs - this.pausedMs;
+  }
+
+  getState() {
+    if (!this.phases.length) return { flameT: 0, phaseT: 0, phase: 'inhale', sessionProg: 0 };
+
+    const elapsed = this.elapsedMs();
+    const sessionProg = this.totalMs ? Math.min(1, elapsed / this.totalMs) : 0;
+
+    if (this.totalMs && !this.done && elapsed >= this.totalMs) {
+      this.done = true;
+      if (this.onDone) setTimeout(this.onDone, 0);
+    }
+
+    if (this.cycleLenMs === 0) return { flameT: 0, phaseT: 0, phase: 'inhale', sessionProg };
+
+    const pos = elapsed % this.cycleLenMs;
+    let acc = 0;
+    for (const p of this.phases) {
+      if (pos < acc + p.durMs) {
+        const t = (pos - acc) / p.durMs;
+        return { flameT: phaseFlameT(p.name, t), phaseT: t, phase: p.name, sessionProg };
+      }
+      acc += p.durMs;
+    }
+    return { flameT: 0, phaseT: 0, phase: 'inhale', sessionProg };
+  }
+}
+
+function phaseFlameT(name, t) {
+  switch (name) {
+    case 'inhale':      return t * t;       // ease-in: accelerates into the peak → clear arrival at max
+    case 'holdTop':     return 1;
+    case 'exhale':      return 1 - t * t;   // ease-in descent: accelerates into the nadir → clear arrival at min
+    case 'holdBottom':  return 0;
+    default:            return 0;
+  }
+}
+
+// Maps phase + linear t (0→1) to (x, y) in virtual-pixel coords on the box perimeter.
+// L/T/R/B are the box edges. Motion: inhale up-left, holdTop right-top, exhale down-right, holdBottom left-bottom.
+function indicatorPosition(phase, t, L, T, R, B) {
+  switch (phase) {
+    case 'inhale':      return [L, B - t * (B - T)];
+    case 'holdTop':     return [L + t * (R - L), T];
+    case 'exhale':      return [R, T + t * (B - T)];
+    case 'holdBottom':  return [R - t * (R - L), B];
+    default:            return [L, B];
+  }
+}
+
+// ─── PIXEL ART RENDERER ───────────────────────────────────────────────────
+// Each "virtual pixel" renders as P×P screen pixels for a chunky pixel-art look.
+let P = 5;
+function computeP() {
+  return Math.max(3, Math.min(7, Math.round(Math.min(canvas.width, canvas.height) / 160)));
+}
+
+// Candle positions in virtual-pixel units (xOff from grid center).
+// Spacing = 10 vp; max holder half-width r=4 → 2 vp gap between adjacent holders.
+const CANDLES = [
+  { xOff: -20, maxWax: 34, flicker: 0.07, holder: 'saucer'      },
+  { xOff: -10, maxWax: 27, flicker: 0.13, holder: 'cup'         },
+  { xOff:   0, maxWax: 40, flicker: 0.00, holder: 'candlestick' },
+  { xOff:  10, maxWax: 29, flicker: 0.09, holder: 'bowl'        },
+  { xOff:  20, maxWax: 23, flicker: 0.05, holder: 'cylinder'    },
+];
+const WAX_HW       = 2;   // wax half-width in virtual pixels (total 4 vp wide)
+const FLAME_MIN_PX = 3;
+const FLAME_MAX_PX = 22;
+
+const flickSeeds = CANDLES.map(() => Math.random() * 1000);
+
+// Warm limited palette
+const PAL = {
+  waxLight:   '#f2e0a0',
+  waxMid:     '#c89438',
+  waxDark:    '#7a5620',
+  waxTop:     '#ecd068',
+  flameCore:  '#fffac8',
+  flameInner: '#ffc028',
+  flameMid:   '#ff7c0c',
+  flameOuter: '#c83400',
+  wick:       '#1c1008',
+  h1: '#7a5228', h2: '#42281a', h3: '#1e100a', // holder shades: light, mid, dark
+};
+
+// ─── CANVAS ───────────────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+
+function resizeCanvas() {
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+  P = computeP();
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+let engine    = null;
+let rafId     = null;
+let dieout    = false;
+let dieoutTs  = 0;
+const DIEOUT_DUR = 2200; // ms for candles to extinguish
+
+function renderLoop() {
+  if (!engine) return;
+  drawFrame();
+  rafId = requestAnimationFrame(renderLoop);
+}
+
+function drawFrame() {
+  const W = canvas.width;
+  const H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.imageSmoothingEnabled = false;
+
+  const state  = engine.getState();
+  const now    = performance.now() / 1000;
+  let   flameT = state.flameT;
+  const waxProg = state.sessionProg;
+
+  let dieoutFactor = 1;
+  if (dieout) {
+    dieoutFactor = Math.max(0, 1 - (performance.now() - dieoutTs) / DIEOUT_DUR);
+    flameT *= dieoutFactor;
+    if (dieoutFactor === 0 && rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  }
+
+  // Virtual-pixel grid centre (snapped to whole vp so pixels are stable)
+  const cx_vp    = Math.round(W / 2 / P);
+  const baseY_vp = Math.round(H * 0.65 / P);
+
+  // Box bounds in virtual-pixel coords (generous padding around the candle cluster)
+  const boxL = cx_vp - 27;
+  const boxR = cx_vp + 27;
+  const boxT = baseY_vp - 68;
+  const boxB = baseY_vp + 11;
+
+  // Smooth ambient glow drawn at full resolution underneath the pixel art
+  const glowR  = 0.04 + flameT * 0.09;
+  const glowCY = (baseY_vp - 14) * P;
+  const glow   = ctx.createRadialGradient(W / 2, glowCY, 0, W / 2, glowCY, Math.min(W, H) * 0.52);
+  glow.addColorStop(0,   `rgba(210,115,25,${glowR})`);
+  glow.addColorStop(0.5, `rgba(150,70,10,${glowR * 0.4})`);
+  glow.addColorStop(1,   'rgba(0,0,0,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, W, H);
+
+  // Subtle 1-vp rectangular outline around the candle cluster
+  ctx.fillStyle = `rgba(180,110,40,${0.22 * dieoutFactor})`;
+  ctx.fillRect(boxL * P, boxT * P, (boxR - boxL + 1) * P, P);           // top edge
+  ctx.fillRect(boxL * P, boxB * P, (boxR - boxL + 1) * P, P);           // bottom edge
+  ctx.fillRect(boxL * P, boxT * P, P, (boxB - boxT + 1) * P);           // left edge
+  ctx.fillRect(boxR * P, boxT * P, P, (boxB - boxT + 1) * P);           // right edge
+
+  CANDLES.forEach((def, i) => {
+    const cx   = cx_vp + def.xOff;
+    const waxH = Math.max(0, Math.floor(def.maxWax * (1 - waxProg)));
+    const waxTop = baseY_vp - waxH;
+
+    pixDrawHolder(cx, baseY_vp, def.holder);
+    if (waxH > 0) pixDrawWax(cx, waxTop, waxH);
+    pixDrawWick(cx, waxTop);
+
+    const flick = Math.sin(now * 6.7  + flickSeeds[i]) * 0.05
+                + Math.sin(now * 11.3 + flickSeeds[i] * 1.7) * 0.025
+                + Math.sin(now * 3.1  + flickSeeds[i] * 0.8) * 0.03;
+
+    let fT = flameT;
+    if (state.phase === 'holdTop' || state.phase === 'holdBottom') {
+      fT = Math.max(0, Math.min(1, fT + flick));
+    }
+
+    const fH = Math.max(0, Math.round(FLAME_MIN_PX + (FLAME_MAX_PX - FLAME_MIN_PX) * fT));
+    pixDrawFlame(cx, waxTop - 2, fH, now, flickSeeds[i]);
+  });
+
+  // Perimeter indicator: 2×2 vp dot tracing the box edge at constant speed
+  if (!engine.paused) {
+    const [ix, iy] = indicatorPosition(state.phase, state.phaseT, boxL, boxT, boxR, boxB);
+    ctx.fillStyle = `rgba(230,155,55,${0.85 * dieoutFactor})`;
+    ctx.fillRect(Math.round((ix - 1) * P), Math.round((iy - 1) * P), 2 * P, 2 * P);
+  }
+
+  if (engine && engine.paused) {
+    ctx.fillStyle = 'rgba(0,0,0,0.28)';
+    ctx.fillRect(0, 0, W, H);
+  }
+}
+
+// ─── PIXEL ART DRAWING HELPERS ────────────────────────────────────────────
+function pxRow(x, y, w, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x * P, y * P, w * P, P);
+}
+function pxBlock(x, y, w, h, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x * P, y * P, w * P, h * P);
+}
+
+// Flame: teardrop profile built row-by-row in virtual pixels.
+// Each row's half-width follows sin() for a rounded tip and base.
+// Individual edge pixels randomly drop each frame for authentic shimmer.
+function pixDrawFlame(cx, baseY, h, now, seed) {
+  if (h < 1) return;
+  const maxHW = Math.max(1, Math.round(h * 0.26));
+  for (let row = 0; row < h; row++) {
+    const ft = row / Math.max(h - 1, 1); // 0 = tip, 1 = base
+    let hw = Math.round(maxHW * Math.sin(Math.min(ft * Math.PI * 0.92 + 0.06, Math.PI)));
+    hw = Math.max(0, hw);
+    // Shimmer: stochastically drop the outermost pixel on some rows/frames
+    if (hw > 0 && ft > 0.08 && ft < 0.94 && Math.sin(now * 9.1 + seed * 2.1 + row * 1.8) > 0.42) {
+      hw = Math.max(0, hw - 1);
+    }
+    const vy = baseY - h + row;
+    for (let dx = -hw; dx <= hw; dx++) {
+      const dr = hw > 0 ? Math.abs(dx) / (hw + 0.01) : 0;
+      let color;
+      if      (ft < 0.13)  color = dr < 0.6  ? PAL.flameCore  : PAL.flameInner;
+      else if (dr < 0.22)  color = PAL.flameCore;
+      else if (dr < 0.56)  color = PAL.flameInner;
+      else if (dr < 0.82)  color = PAL.flameMid;
+      else                 color = PAL.flameOuter;
+      ctx.fillStyle = color;
+      ctx.fillRect((cx + dx) * P, vy * P, P, P);
+    }
+  }
+}
+
+function pixDrawWax(cx, waxTop, waxH) {
+  pxBlock(cx - WAX_HW,         waxTop, 1,             waxH, PAL.waxDark);
+  pxBlock(cx - WAX_HW + 1,     waxTop, WAX_HW * 2 - 2, waxH, PAL.waxMid);
+  pxBlock(cx + WAX_HW - 1,     waxTop, 1,             waxH, PAL.waxDark);
+  if (waxH > 2) pxBlock(cx - WAX_HW + 1, waxTop + 1, 1, Math.min(waxH - 1, 5), PAL.waxLight);
+  pxRow(cx - WAX_HW, waxTop, WAX_HW * 2, PAL.waxTop); // melted top face
+}
+
+function pixDrawWick(cx, waxTop) {
+  ctx.fillStyle = PAL.wick;
+  ctx.fillRect(cx * P, (waxTop - 2) * P, P, 2 * P);
+}
+
+// ── Holder row helpers ────────────────────────────────────────────────────
+// r = radius: row spans cx−r … cx+r, total width 2r+1 (always odd, always centred).
+// topRow  — flat lit top face (solid h1)
+// shRow   — cylindrical side face: dark outer edges, h1 highlight, h2 fill
+// botRow  — bottom face in shadow (solid h3)
+function topRow(cx, y, r) {
+  pxRow(cx - r, y, 2 * r + 1, PAL.h1);
+}
+function shRow(cx, y, r) {
+  pxRow(cx - r, y, 2 * r + 1, PAL.h2);
+  ctx.fillStyle = PAL.h3;
+  ctx.fillRect((cx - r)     * P, y * P, P, P);
+  ctx.fillRect((cx + r)     * P, y * P, P, P);
+  ctx.fillStyle = PAL.h1;
+  ctx.fillRect((cx - r + 1) * P, y * P, P, P);
+}
+function botRow(cx, y, r) {
+  pxRow(cx - r, y, 2 * r + 1, PAL.h3);
+}
+
+// All five holders are exactly 8 rows tall (rows 0–7 below baseY) → flat even base.
+// Candle spacing = 10 vp; max r = 4 (9 vp wide) → 2 vp gap between adjacent holders.
+function pixDrawHolder(cx, baseY, type) {
+  const b = baseY;
+  switch (type) {
+
+    case 'saucer':
+      // Broad flat disc: opens to full width on row 1, gentle taper at base
+      topRow(cx, b,     2);
+      shRow (cx, b + 1, 4);
+      shRow (cx, b + 2, 4);
+      shRow (cx, b + 3, 4);
+      shRow (cx, b + 4, 4);
+      shRow (cx, b + 5, 3);
+      shRow (cx, b + 6, 2);
+      botRow(cx, b + 7, 2);
+      break;
+
+    case 'cup':
+      // Goblet: narrow mouth → widens → tight waist → flares to foot
+      topRow(cx, b,     2);
+      shRow (cx, b + 1, 3);
+      shRow (cx, b + 2, 4);
+      shRow (cx, b + 3, 2);
+      shRow (cx, b + 4, 2);
+      shRow (cx, b + 5, 3);
+      shRow (cx, b + 6, 4);
+      botRow(cx, b + 7, 4);
+      break;
+
+    case 'candlestick':
+      // Collar → narrow stem → sudden wide foot (most dramatic silhouette)
+      topRow(cx, b,     2);
+      shRow (cx, b + 1, 3);
+      shRow (cx, b + 2, 2);
+      shRow (cx, b + 3, 1);
+      shRow (cx, b + 4, 1);
+      shRow (cx, b + 5, 1);
+      topRow(cx, b + 6, 4);  // foot top face — lit flat surface
+      botRow(cx, b + 7, 4);
+      break;
+
+    case 'bowl':
+      // Shallow wide bowl: opens immediately to full width, stays wide
+      topRow(cx, b,     2);
+      topRow(cx, b + 1, 4);  // broad rim top — shows full breadth at once
+      shRow (cx, b + 2, 4);
+      shRow (cx, b + 3, 4);
+      shRow (cx, b + 4, 4);
+      shRow (cx, b + 5, 3);
+      shRow (cx, b + 6, 2);
+      botRow(cx, b + 7, 2);
+      break;
+
+    case 'cylinder':
+      // Straight-sided sleeve: perfectly uniform, tallest presence
+      topRow(cx, b,     3);
+      shRow (cx, b + 1, 3);
+      shRow (cx, b + 2, 3);
+      shRow (cx, b + 3, 3);
+      shRow (cx, b + 4, 3);
+      shRow (cx, b + 5, 3);
+      shRow (cx, b + 6, 3);
+      botRow(cx, b + 7, 3);
+      break;
+  }
+}
+
+// ─── AUDIO ─────────────────────────────────────────────────────────────────
+let audioCtx = null;
+let gainNode = null;
+
+function initAudio() {
+  if (audioCtx) return;
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const sr = audioCtx.sampleRate;
+    const dur = 4; // seconds, looped
+    const buf = audioCtx.createBuffer(1, sr * dur, sr);
+    const d = buf.getChannelData(0);
+
+    // Brown noise
+    let last = 0;
+    for (let i = 0; i < d.length; i++) {
+      const white = Math.random() * 2 - 1;
+      last = (last + 0.02 * white) / 1.02;
+      d[i] = last * 6;
+    }
+
+    // Crackle pops
+    for (let i = 0; i < d.length; i++) {
+      if (Math.random() < 0.00025) {
+        const len = Math.floor(Math.random() * 180 + 40);
+        for (let j = 0; j < len && i+j < d.length; j++) {
+          d[i+j] += (Math.random() * 2 - 1) * Math.sin(Math.PI * j / len) * 0.25;
+        }
+      }
+    }
+
+    // Normalize to ~0.12
+    let mx = 0;
+    for (let i = 0; i < d.length; i++) mx = Math.max(mx, Math.abs(d[i]));
+    if (mx > 0) for (let i = 0; i < d.length; i++) d[i] = d[i] / mx * 0.12;
+
+    const src = audioCtx.createBufferSource();
+    src.buffer = buf;
+    src.loop   = true;
+
+    const lpf = audioCtx.createBiquadFilter();
+    lpf.type = 'lowpass';
+    lpf.frequency.value = 700;
+
+    gainNode = audioCtx.createGain();
+    gainNode.gain.value = 0;
+
+    src.connect(lpf).connect(gainNode).connect(audioCtx.destination);
+    src.start();
+  } catch(e) {
+    console.warn('Audio unavailable:', e);
+  }
+}
+
+function setSound(on) {
+  initAudio();
+  if (!gainNode) return;
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  gainNode.gain.linearRampToValueAtTime(on ? 0.5 : 0, audioCtx.currentTime + 0.6);
+}
+
+// ─── SETUP UI ──────────────────────────────────────────────────────────────
+function cycleLen(p) { return p.reduce((a,b)=>a+b,0); }
+
+function buildPresets() {
+  const grid = document.getElementById('presets-grid');
+  grid.innerHTML = '';
+  PRESETS.forEach(pr => {
+    const el = document.createElement('div');
+    el.className = 'preset-card' + (pr === selPreset ? ' active' : '');
+    el.innerHTML = `
+      <div class="preset-name">${pr.name}</div>
+      <div class="preset-timing">${pr.p.join(' – ')}</div>
+      <div class="preset-desc">${pr.desc}</div>
+    `;
+    el.addEventListener('click', () => {
+      selPreset = pr;
+      document.getElementById('custom-row').classList.toggle('collapsed', pr.id !== 'custom');
+      if (pr.id !== 'custom') pattern = [...pr.p];
+      else syncCustom();
+      buildPresets();
+      buildDurations();
+    });
+    grid.appendChild(el);
+  });
+}
+
+function buildDurations() {
+  const row = document.getElementById('duration-row');
+  row.innerHTML = '';
+  const cl = cycleLen(pattern);
+
+  const freeEl = document.createElement('button');
+  freeEl.className = 'dur-btn' + (selDurSec === null ? ' active' : '');
+  freeEl.textContent = 'free';
+  freeEl.addEventListener('click', () => { selDurSec = null; buildDurations(); });
+  row.appendChild(freeEl);
+
+  if (cl > 0) {
+    DUR_TARGETS.forEach((tgt, i) => {
+      const cycles = Math.max(1, Math.round(tgt / cl));
+      const exact  = cycles * cl;
+      const btn = document.createElement('button');
+      btn.className = 'dur-btn' + (selDurSec === exact ? ' active' : '');
+      btn.textContent = DUR_LABELS[i];
+      btn.addEventListener('click', () => { selDurSec = exact; buildDurations(); });
+      row.appendChild(btn);
+    });
+  }
+
+  document.getElementById('begin-btn').disabled = cl === 0;
+}
+
+function syncCustom() {
+  pattern = [
+    parseInt(document.getElementById('ci').value)  || 0,
+    parseInt(document.getElementById('ch1').value) || 0,
+    parseInt(document.getElementById('ce').value)  || 0,
+    parseInt(document.getElementById('ch2').value) || 0,
+  ];
+}
+
+['ci','ch1','ce','ch2'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => { syncCustom(); buildDurations(); });
+});
+
+buildPresets();
+buildDurations();
+
+// ─── SCREEN MANAGEMENT ─────────────────────────────────────────────────────
+function showScreen(name) {
+  ['setup','session','complete'].forEach(n => {
+    document.getElementById('screen-' + n).classList.toggle('hidden', n !== name);
+  });
+}
+
+// ─── SESSION ───────────────────────────────────────────────────────────────
+function startSession() {
+  if (selPreset.id === 'custom') syncCustom();
+  else pattern = [...selPreset.p];
+
+  if (cycleLen(pattern) === 0) return;
+
+  engine  = new BreathEngine(pattern, selDurSec);
+  dieout  = false;
+
+  engine.onDone = () => {
+    dieout   = true;
+    dieoutTs = performance.now();
+    setTimeout(() => showScreen('complete'), DIEOUT_DUR + 300);
+  };
+
+  resizeCanvas();
+  showScreen('session');
+  if (soundOn) setSound(true);
+
+  engine.start();
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = requestAnimationFrame(renderLoop);
+}
+
+document.getElementById('begin-btn').addEventListener('click', startSession);
+
+document.getElementById('pause-btn').addEventListener('click', () => {
+  if (!engine) return;
+  if (engine.paused) {
+    engine.resume();
+    document.getElementById('pause-btn').textContent = 'pause';
+    if (!rafId) rafId = requestAnimationFrame(renderLoop);
+  } else {
+    engine.pause();
+    document.getElementById('pause-btn').textContent = 'resume';
+    // keep drawing (for paused overlay)
+  }
+});
+
+document.getElementById('stop-btn').addEventListener('click', () => {
+  if (engine) { engine.stop(); }
+  setSound(false);
+  dieout   = true;
+  dieoutTs = performance.now();
+  setTimeout(() => {
+    showScreen('complete');
+    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  }, DIEOUT_DUR + 200);
+});
+
+document.getElementById('sound-btn').addEventListener('click', () => {
+  soundOn = !soundOn;
+  document.getElementById('sound-btn').textContent = soundOn ? 'sound on' : 'sound off';
+  if (engine && !engine.done) setSound(soundOn);
+});
+
+document.getElementById('again-btn').addEventListener('click', () => {
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+  engine = null;
+  setSound(false);
+  document.getElementById('pause-btn').textContent = 'pause';
+  buildPresets();
+  buildDurations();
+  showScreen('setup');
+});
+</script>
+</body>
+</html>
