@@ -379,11 +379,11 @@ function computeP() {
 // Candle positions in virtual-pixel units (xOff from grid center).
 // Spacing = 10 vp; max holder half-width r=4 → 2 vp gap between adjacent holders.
 const CANDLES = [
-  { xOff: -20, maxWax: 34, flicker: 0.07, holder: 'saucer'      },
-  { xOff: -10, maxWax: 27, flicker: 0.13, holder: 'cup'         },
-  { xOff:   0, maxWax: 40, flicker: 0.00, holder: 'candlestick' },
-  { xOff:  10, maxWax: 29, flicker: 0.09, holder: 'bowl'        },
-  { xOff:  20, maxWax: 23, flicker: 0.05, holder: 'cylinder'    },
+  { xOff: -20, maxWax: 34, flicker: 0.07, holder: 'saucer',      highlight: 7 },
+  { xOff: -10, maxWax: 27, flicker: 0.13, holder: 'cup',         highlight: 4 },
+  { xOff:   0, maxWax: 40, flicker: 0.00, holder: 'candlestick', highlight: 9 },
+  { xOff:  10, maxWax: 29, flicker: 0.09, holder: 'bowl',        highlight: 3 },
+  { xOff:  20, maxWax: 23, flicker: 0.05, holder: 'cylinder',    highlight: 6 },
 ];
 const WAX_HW       = 2;   // wax half-width in virtual pixels (total 4 vp wide)
 const FLAME_MIN_PX = 3;
@@ -419,9 +419,10 @@ window.addEventListener('resize', resizeCanvas);
 
 let engine    = null;
 let rafId     = null;
-let dieout    = false;
-let dieoutTs  = 0;
-const DIEOUT_DUR = 2200; // ms for candles to extinguish
+let dieout          = false;
+let dieoutTs        = 0;
+let smokeParticles = [];
+const DIEOUT_DUR = 3000; // ms for candles to extinguish + smoke to clear
 
 function renderLoop() {
   if (!engine) return;
@@ -440,11 +441,14 @@ function drawFrame() {
   let   flameT = state.flameT;
   const waxProg = state.sessionProg;
 
-  let dieoutFactor = 1;
+  let dieoutFactor      = 1;
+  let flameDieoutFactor = 1;
+  let dieoutElapsed     = 0;
   if (dieout) {
-    dieoutFactor = Math.max(0, 1 - (performance.now() - dieoutTs) / DIEOUT_DUR);
-    flameT *= dieoutFactor;
-    if (dieoutFactor === 0 && rafId) { cancelAnimationFrame(rafId); rafId = null; }
+    dieoutElapsed      = performance.now() - dieoutTs;
+    dieoutFactor       = Math.max(0, 1 - dieoutElapsed / DIEOUT_DUR);
+    flameDieoutFactor  = Math.max(0, 1 - dieoutElapsed / (DIEOUT_DUR * 0.3));
+    flameT            *= flameDieoutFactor;
   }
 
   // Virtual-pixel grid centre (snapped to whole vp so pixels are stable)
@@ -480,7 +484,7 @@ function drawFrame() {
     const waxTop = baseY_vp - waxH;
 
     pixDrawHolder(cx, baseY_vp, def.holder);
-    if (waxH > 0) pixDrawWax(cx, waxTop, waxH);
+    if (waxH > 0) pixDrawWax(cx, waxTop, waxH, def.highlight);
     pixDrawWick(cx, waxTop);
 
     const flick = Math.sin(now * 6.7  + flickSeeds[i]) * 0.05
@@ -492,23 +496,81 @@ function drawFrame() {
       fT = Math.max(0, Math.min(1, fT + flick));
     }
 
-    const fH = Math.max(0, Math.round(FLAME_MIN_PX + (FLAME_MAX_PX - FLAME_MIN_PX) * fT));
+    const fH = Math.max(0, Math.round((FLAME_MIN_PX + (FLAME_MAX_PX - FLAME_MIN_PX) * fT) * flameDieoutFactor));
     pixDrawFlame(cx, waxTop - 2, fH, now, flickSeeds[i]);
   });
 
-  // Perimeter indicator: 2×2 vp dot tracing the outside of the box edge
+  // Smoke particles
+  if (dieout) {
+    const smokePhase = dieoutElapsed / DIEOUT_DUR;
+    const spawning   = smokePhase > 0.08 && smokePhase < 0.72;
+    if (spawning) {
+      CANDLES.forEach((def) => {
+        const cx    = cx_vp + def.xOff;
+        const waxH  = Math.max(0, Math.floor(def.maxWax * (1 - waxProg)));
+        const wickY = baseY_vp - waxH - 2;
+        if (Math.random() < 0.5) spawnSmoke(cx, wickY);
+      });
+    }
+    drawSmoke(now);
+  }
+
+  // Perimeter indicator: freeze at bottom-left on dieout, otherwise trace normally
   if (!engine.paused) {
-    const [ix, iy] = indicatorPosition(state.phase, state.phaseT, boxL, boxT, boxR, boxB);
+    let dotX, dotY;
+    if (dieout) {
+      dotX = boxL - 1;
+      dotY = boxB;
+    } else {
+      const [ix, iy] = indicatorPosition(state.phase, state.phaseT, boxL, boxT, boxR, boxB);
+      dotX = ix - 1;
+      dotY = iy - 1;
+      if (state.phase === 'exhale')      dotX = boxR;
+      if (state.phase === 'holdBottom')  dotY = boxB;
+    }
     ctx.fillStyle = `rgba(230,155,55,${0.85 * dieoutFactor})`;
-    let dotX = ix - 1, dotY = iy - 1;
-    if (state.phase === 'exhale')      dotX = boxR;  // right border is 1vp wide, shift out to match
-    if (state.phase === 'holdBottom')  dotY = boxB;  // bottom border is 1vp wide, shift out to match
     ctx.fillRect(Math.round(dotX * P), Math.round(dotY * P), 2 * P, 2 * P);
   }
 
   if (engine && engine.paused) {
     ctx.fillStyle = 'rgba(0,0,0,0.28)';
     ctx.fillRect(0, 0, W, H);
+  }
+}
+
+// ── SMOKE PARTICLES ─────────────────────────────────────────────────────────
+
+function spawnSmoke(cx, wickY) {
+  smokeParticles.push({
+    x:            cx + (Math.random() - 0.5) * 2,
+    y:            wickY,
+    vx:           (Math.random() - 0.5) * 0.02,
+    vy:           -(0.1 + Math.random() * 0.1),
+    baseOpacity:  0.4 + Math.random() * 0.35,
+    shimmerFreq:  7 + Math.random() * 9,
+    shimmerPhase: Math.random() * Math.PI * 2,
+    driftFreq:    1.5 + Math.random() * 2,
+    driftPhase:   Math.random() * Math.PI * 2,
+    age:          0,
+    maxAge:       240 + Math.floor(Math.random() * 100),
+    size:         Math.random() < 0.3 ? 2 : 1,
+  });
+}
+
+function drawSmoke(now) {
+  smokeParticles = smokeParticles.filter(p => p.age < p.maxAge);
+  for (const p of smokeParticles) {
+    p.x  += p.vx + Math.sin(now * p.driftFreq + p.driftPhase) * 0.02;
+    p.y  += p.vy;
+    p.vy *= 1;
+    p.age++;
+    const lifeFrac = p.age / p.maxAge;
+    const shimmer  = 0.5 + 0.5 * Math.sin(now * p.shimmerFreq + p.shimmerPhase);
+    const opacity  = p.baseOpacity * (1 - lifeFrac * lifeFrac) * (0.55 + 0.45 * shimmer);
+    if (opacity < 0.01) continue;
+    const warmth = Math.max(0, 1 - lifeFrac * 2.5);
+    ctx.fillStyle = `rgba(${Math.round(195+warmth*22)},${Math.round(188+warmth*10)},180,${opacity.toFixed(3)})`;
+    ctx.fillRect(Math.round(p.x*P - (p.size*P)/2), Math.round(p.y*P), p.size*P, P);
   }
 }
 
@@ -527,21 +589,28 @@ function pxBlock(x, y, w, h, color) {
 // Individual edge pixels randomly drop each frame for authentic shimmer.
 function pixDrawFlame(cx, baseY, h, now, seed) {
   if (h < 1) return;
-  const maxHW = Math.max(1, Math.round(h * 0.29));
+  const maxHW = Math.max(1, Math.round(h * 0.20));
   for (let row = 0; row < h; row++) {
     const ft = row / Math.max(h - 1, 1); // 0 = tip, 1 = base
-    let hw = Math.round(maxHW * Math.sin(Math.min(Math.pow(ft, 1.7) * Math.PI, Math.PI)));
+    const peakFt = 0.82;
+    const profile = ft <= peakFt
+      ? Math.sin((ft / peakFt) * (Math.PI / 2))
+      : Math.cos(((ft - peakFt) / (1 - peakFt)) * (Math.PI / 2));
+    let hw = Math.round(maxHW * profile);
     hw = Math.max(0, hw);
     // Shimmer: stochastically drop the outermost pixel on some rows/frames
     if (hw > 0 && ft > 0.08 && ft < 0.94 && Math.sin(now * 9.1 + seed * 2.1 + row * 1.8) > 0.42) {
       hw = Math.max(0, hw - 1);
     }
     const vy = baseY - h + row;
+    const coreColor = ft < 0.13 ? PAL.flameOuter
+                    : ft < 0.33 ? PAL.flameMid
+                    :              PAL.flameCore;
     for (let dx = -hw; dx <= hw; dx++) {
       const dr = hw > 0 ? Math.abs(dx) / (hw + 0.01) : 0;
       let color;
-      if      (ft < 0.13)  color = dr < 0.6  ? PAL.flameCore  : PAL.flameInner;
-      else if (dr < 0.22)  color = PAL.flameCore;
+      if      (ft < 0.13)  color = dr < 0.6  ? coreColor      : PAL.flameInner;
+      else if (dr < 0.22)  color = coreColor;
       else if (dr < 0.56)  color = PAL.flameInner;
       else if (dr < 0.82)  color = PAL.flameMid;
       else                 color = PAL.flameOuter;
@@ -551,12 +620,12 @@ function pixDrawFlame(cx, baseY, h, now, seed) {
   }
 }
 
-function pixDrawWax(cx, waxTop, waxH) {
-  pxBlock(cx - WAX_HW,         waxTop, 1,             waxH, PAL.waxDark);
-  pxBlock(cx - WAX_HW + 1,     waxTop, WAX_HW * 2 - 2, waxH, PAL.waxMid);
-  pxBlock(cx + WAX_HW - 1,     waxTop, 1,             waxH, PAL.waxDark);
-  if (waxH > 2) pxBlock(cx - WAX_HW + 1, waxTop + 1, 1, Math.min(waxH - 1, 5), PAL.waxLight);
-  pxRow(cx - WAX_HW, waxTop, WAX_HW * 2, PAL.waxTop); // melted top face
+function pixDrawWax(cx, waxTop, waxH, highlight) {
+  pxBlock(cx - WAX_HW,         waxTop, 1,               waxH, PAL.waxDark);
+  pxBlock(cx - WAX_HW + 1,     waxTop, WAX_HW * 2 - 1,  waxH, PAL.waxMid);
+  pxBlock(cx + WAX_HW - 0,     waxTop, 1,               waxH, PAL.waxDark);
+  if (waxH > 2) pxBlock(cx - WAX_HW + 1, waxTop + 1, 1, Math.min(waxH - 1, highlight), PAL.waxLight);
+  pxRow(cx - WAX_HW, waxTop, WAX_HW * 2.5, PAL.waxTop);
 }
 
 function pixDrawWick(cx, waxTop) {
@@ -782,7 +851,8 @@ buildDurations();
 // ─── SCREEN MANAGEMENT ─────────────────────────────────────────────────────
 function showScreen(name) {
   ['setup','session','complete'].forEach(n => {
-    document.getElementById('screen-' + n).classList.toggle('hidden', n !== name);
+    const hide = n !== name && !(name === 'complete' && n === 'session');
+    document.getElementById('screen-' + n).classList.toggle('hidden', hide);
   });
 }
 
@@ -801,12 +871,15 @@ function startSession() {
   }
 
   engine  = new BreathEngine(pattern, totalSec);
-  dieout  = false;
+  dieout = false;
+  smokeParticles = [];
 
   engine.onDone = () => {
     dieout   = true;
     dieoutTs = performance.now();
-    setTimeout(() => showScreen('complete'), DIEOUT_DUR + 300);
+    document.querySelector('.session-ui').style.display = 'none';
+    document.getElementById('sound-btn').style.display  = 'none';
+    setTimeout(() => showScreen('complete'), DIEOUT_DUR + 1200);
   };
 
   resizeCanvas();
@@ -838,10 +911,9 @@ document.getElementById('stop-btn').addEventListener('click', () => {
   setSound(false);
   dieout   = true;
   dieoutTs = performance.now();
-  setTimeout(() => {
-    showScreen('complete');
-    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-  }, DIEOUT_DUR + 200);
+  document.querySelector('.session-ui').style.display = 'none';
+  document.getElementById('sound-btn').style.display  = 'none';
+  setTimeout(() => showScreen('complete'), DIEOUT_DUR + 1100);
 });
 
 document.getElementById('sound-btn').addEventListener('click', () => {

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Smoke Sandbox</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0b0907; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; gap: 20px; }
+    canvas { display: block; }
+    button {
+      background: transparent;
+      border: 1px solid rgba(180,120,50,0.4);
+      border-radius: 24px;
+      padding: 10px 36px;
+      color: rgba(180,120,50,0.7);
+      font-size: 0.9rem;
+      letter-spacing: 0.2em;
+      cursor: pointer;
+      font-family: Georgia, serif;
+    }
+    button:hover { background: rgba(180,120,50,0.08); }
+  </style>
+</head>
+<body>
+<canvas id="c" width="500" height="400"></canvas>
+<button id="play-btn">play</button>
+
+<script>
+'use strict';
+
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+const P = 5; // virtual pixel size
+
+// Spawn points — five evenly spaced, like the candle wicks
+const SPAWN_POINTS = [-20, -10, 0, 10, 20].map(xOff => ({
+  x: Math.round(canvas.width  / 2 / P) + xOff,
+  y: Math.round(canvas.height / 2 / P) - 2,
+}));
+
+// ── SMOKE PARAMETERS — tweak these ──────────────────────────────────────────
+const SPAWN_DURATION_MS = 700;   // how long to keep spawning after play
+const SPAWN_PROB        = 0.5;   // chance to spawn per point per frame
+
+function makeParticle(cx, wickY) {
+  return {
+    x:            cx + (Math.random() - 0.5) * 2,
+    y:            wickY,
+    vx:           (Math.random() - 0.5) * 0.02,
+    vy:           -(0.1 + Math.random() * 0.1),
+    baseOpacity:  0.4 + Math.random() * 0.35,
+    shimmerFreq:  7 + Math.random() * 9,
+    shimmerPhase: Math.random() * Math.PI * 2,
+    driftFreq:    1.5 + Math.random() * 2,
+    driftPhase:   Math.random() * Math.PI * 2,
+    age:          0,
+    maxAge:       240 + Math.floor(Math.random() * 100),
+    size:         Math.random() < 0.3 ? 2 : 1,
+  };
+}
+// ────────────────────────────────────────────────────────────────────────────
+
+let particles  = [];
+let spawnStart = null;
+let rafId      = null;
+
+function tick() {
+  const now     = performance.now();
+  const nowSec  = now / 1000;
+  const spawning = spawnStart !== null && (now - spawnStart) < SPAWN_DURATION_MS;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (spawning) {
+    for (const sp of SPAWN_POINTS) {
+      if (Math.random() < SPAWN_PROB) particles.push(makeParticle(sp.x, sp.y));
+    }
+  }
+
+  particles = particles.filter(p => p.age < p.maxAge);
+
+  for (const p of particles) {
+    p.x   += p.vx + Math.sin(nowSec * p.driftFreq + p.driftPhase) * 0.02;
+    p.y   += p.vy;
+    p.age++;
+    const lifeFrac = p.age / p.maxAge;
+    const shimmer  = 0.5 + 0.5 * Math.sin(nowSec * p.shimmerFreq + p.shimmerPhase);
+    const opacity  = p.baseOpacity * (1 - lifeFrac * lifeFrac) * (0.55 + 0.45 * shimmer);
+    if (opacity < 0.01) continue;
+    const warmth = Math.max(0, 1 - lifeFrac * 2.5);
+    ctx.fillStyle = `rgba(${Math.round(195+warmth*22)},${Math.round(188+warmth*10)},180,${opacity.toFixed(3)})`;
+    ctx.fillRect(Math.round(p.x*P - (p.size*P)/2), Math.round(p.y*P), p.size*P, P);
+  }
+
+  // Draw spawn point markers
+  ctx.fillStyle = 'rgba(180,100,30,0.25)';
+  for (const sp of SPAWN_POINTS) {
+    ctx.fillRect(sp.x * P, sp.y * P, P, P);
+  }
+
+  if (particles.length > 0 || spawning) {
+    rafId = requestAnimationFrame(tick);
+  } else {
+    rafId = null;
+  }
+}
+
+document.getElementById('play-btn').addEventListener('click', () => {
+  particles  = [];
+  spawnStart = performance.now();
+  if (!rafId) rafId = requestAnimationFrame(tick);
+});
+</script>
+</body>
+</html>
