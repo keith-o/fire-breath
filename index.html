@@ -496,6 +496,7 @@ let engine   = null;
 let rafId    = null;
 let dieout   = false;
 let dieoutTs = 0;
+let lastFrameTs = 0;
 let smokeParticles = [];
 const DIEOUT_DUR = 3000; // ms for candles to extinguish + smoke to clear
 
@@ -512,9 +513,17 @@ function drawFrame() {
   ctx.imageSmoothingEnabled = false;
 
   const state   = engine.getState();
-  const now     = performance.now() / 1000;
+  const nowMs   = performance.now();
+  const now     = nowMs / 1000;
   let   flameT  = state.flameT;
   const waxProg = state.sessionProg;
+
+  // Frames elapsed relative to a 60fps reference. The smoke integrates per
+  // step, so without this it would run at double speed on a 120Hz screen.
+  // Clamped so a backgrounded tab doesn't teleport the particles on return.
+  const dt   = lastFrameTs ? Math.min(0.05, (nowMs - lastFrameTs) / 1000) : 1 / 60;
+  const step = dt * 60;
+  lastFrameTs = nowMs;
 
   let dieoutFactor      = 1;
   let flameDieoutFactor = 1;
@@ -593,16 +602,19 @@ function drawFrame() {
   // Smoke particles
   if (dieout) {
     const smokePhase = dieoutElapsed / DIEOUT_DUR;
-    const spawning   = smokePhase > 0.08 && smokePhase < 0.72;
-    if (spawning) {
+    if (smokePhase > 0.04 && smokePhase < 0.78) {
+      // Dense puff as the flame goes out, tapering to a thin trailing wisp.
+      // Above 1/frame so the thread stays continuous rather than beaded.
+      const rate = 1.6 * Math.pow(1 - (smokePhase - 0.04) / 0.74, 0.85) * step;
+      const n    = Math.floor(rate) + (Math.random() < rate % 1 ? 1 : 0);
       CANDLES.forEach((def) => {
         const cx    = cx_vp + def.xOff;
         const waxH  = Math.max(0, Math.floor(def.maxWax * (1 - waxProg)));
         const wickY = baseY_vp - waxH - 2;
-        if (Math.random() < 0.5) spawnSmoke(cx, wickY);
+        for (let k = 0; k < n; k++) spawnSmoke(cx, wickY);
       });
     }
-    drawSmoke(now);
+    drawSmoke(now, step);
   }
 
   // Perimeter indicator: freeze at bottom-left on dieout, otherwise trace normally
@@ -630,36 +642,67 @@ function drawFrame() {
 
 // ── SMOKE PARTICLES ─────────────────────────────────────────────────────────
 
+// Every particle samples one shared flow field rather than carrying its own
+// random drift, so neighbours travel together and the plume reads as a fluid
+// instead of as independent confetti. The waves advect upward — sin(ky + ωt)
+// has phase velocity −ω/k — which makes the column flow rather than wobble.
+function smokeFlow(x, y, t) {
+  return Math.sin(y * 0.26 + t * 1.9 + x * 0.11) * 0.55
+       + Math.sin(y * 0.10 + t * 1.1 - x * 0.07) * 0.33
+       + Math.sin(y * 0.52 + t * 3.1)            * 0.14;
+}
+
 function spawnSmoke(cx, wickY) {
   smokeParticles.push({
-    x:            cx + (Math.random() - 0.5) * 2,
-    y:            wickY,
-    vx:           (Math.random() - 0.5) * 0.02,
-    vy:           -(0.1 + Math.random() * 0.1),
-    baseOpacity:  0.4 + Math.random() * 0.35,
-    shimmerFreq:  7 + Math.random() * 9,
+    x:            cx + (Math.random() - 0.5) * 0.6, // leaves the wick as a tight thread
+    // sub-pixel stagger so same-frame spawns don't stack on one row
+    y:            wickY - Math.random() * 0.9,
+    y0:           wickY,
+    vy:           -(0.16 + Math.random() * 0.07),   // buoyant while still hot
+    drift:        (Math.random() - 0.5) * 0.012,
+    calm:         5 + Math.random() * 7,            // vp of laminar rise before it breaks
+    swirl:        0.7 + Math.random() * 0.6,
+    baseOpacity:  0.30 + Math.random() * 0.22,
+    shimmerFreq:  5 + Math.random() * 7,
     shimmerPhase: Math.random() * Math.PI * 2,
-    driftFreq:    1.5 + Math.random() * 2,
-    driftPhase:   Math.random() * Math.PI * 2,
     age:          0,
-    maxAge:       240 + Math.floor(Math.random() * 100),
-    size:         Math.random() < 0.3 ? 2 : 1,
+    maxAge:       200 + Math.floor(Math.random() * 120),
   });
 }
 
-function drawSmoke(now) {
+function drawSmoke(now, step) {
   smokeParticles = smokeParticles.filter(p => p.age < p.maxAge);
   for (const p of smokeParticles) {
-    p.x  += p.vx + Math.sin(now * p.driftFreq + p.driftPhase) * 0.02;
-    p.y  += p.vy;
-    p.age++;
+    const rise = p.y0 - p.y;
+    // Lateral motion is suppressed near the wick and ramps in with height: a
+    // snuffed candle sends up a straight thread that only then curls. That
+    // laminar-to-turbulent break is what makes candle smoke recognisable.
+    const turb = Math.min(1, Math.max(0, (rise - p.calm) / 9));
+
+    // Drift widens with height so the plume fans out instead of rising as a
+    // parallel-sided column
+    p.x  += (p.drift * (1 + rise * 0.07)
+          + smokeFlow(p.x, p.y, now) * turb * p.swirl * 0.085) * step;
+    p.y  += p.vy * step;
+    p.vy *= Math.pow(0.992, step);                  // cools and slows as it climbs
+    p.age += step;
+
     const lifeFrac = p.age / p.maxAge;
     const shimmer  = 0.5 + 0.5 * Math.sin(now * p.shimmerFreq + p.shimmerPhase);
-    const opacity  = p.baseOpacity * (1 - lifeFrac * lifeFrac) * (0.55 + 0.45 * shimmer);
-    if (opacity < 0.01) continue;
-    const warmth = Math.max(0, 1 - lifeFrac * 2.5);
-    ctx.fillStyle = `rgba(${Math.round(195+warmth*22)},${Math.round(188+warmth*10)},180,${opacity.toFixed(3)})`;
-    ctx.fillRect(Math.round(p.x*P - (p.size*P)/2), Math.round(p.y*P), p.size*P, P);
+    // Thins as it ages, and again as it spreads. Shimmer stays shallow — any
+    // deeper and it punches holes in the ribbon, beading it into dots.
+    const opacity  = p.baseOpacity * (1 - lifeFrac * lifeFrac)
+                   * (0.78 + 0.22 * shimmer) * (1 - 0.45 * turb);
+    if (opacity < 0.012) continue;
+
+    // Warm with residual heat near the wick, cooling to a neutral grey
+    const warmth = Math.max(0, 1 - lifeFrac * 3);
+    const r = Math.round(150 + warmth * 46);
+    const g = Math.round(146 + warmth * 26);
+    const b = Math.round(148 - warmth * 22);
+    const size = (rise > 16 && lifeFrac > 0.35) ? 2 : 1; // entrains air and swells
+    ctx.fillStyle = `rgba(${r},${g},${b},${opacity.toFixed(3)})`;
+    ctx.fillRect(Math.round(p.x * P - (size * P) / 2), Math.round(p.y * P), size * P, P);
   }
 }
 
