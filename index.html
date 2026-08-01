@@ -86,11 +86,22 @@
       user-select: none;
     }
 
-    .presets-grid {
+    /* Wrappers own the width so the grids inside resolve against the viewport
+       rather than their own content, which would overflow a narrow phone. */
+    .section {
+      width: 100%;
+      max-width: 520px;
       display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* 4 presets in a 2×2 and 6 durations in a 3×2 — flex wrapping strands
+       "Custom" and "free" alone on a full-width row at tablet sizes. */
+    .presets-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
       gap: 10px;
-      flex-wrap: wrap;
-      justify-content: center;
       width: min(520px, 100%);
     }
 
@@ -102,7 +113,6 @@
       cursor: pointer;
       transition: background 0.3s, border-color 0.3s, transform 0.3s;
       text-align: center;
-      flex: 1 1 140px;
       user-select: none;
     }
     .preset-card.active { background: var(--fill-active); border-color: var(--line-active); }
@@ -112,7 +122,7 @@
     }
 
     .preset-name { font-size: clamp(0.88rem, 3vw, 1rem); color: var(--warm-bright); margin-bottom: 4px; }
-    .preset-timing { font-size: clamp(0.7rem, 2.2vw, 0.78rem); font-family: monospace; letter-spacing: 0.08em; color: var(--warm-dim); }
+    .preset-timing { font-size: clamp(0.7rem, 2.2vw, 0.78rem); font-family: monospace; letter-spacing: 0.08em; color: var(--warm-dim); white-space: nowrap; }
     .preset-desc { font-size: clamp(0.65rem, 2vw, 0.72rem); color: var(--text-muted); margin-top: 6px; font-style: italic; }
 
     .custom-row {
@@ -140,10 +150,9 @@
     input[type=number] { -moz-appearance: textfield; }
 
     .duration-row {
-      display: flex;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
       gap: 8px;
-      flex-wrap: wrap;
-      justify-content: center;
       width: min(520px, 100%);
     }
 
@@ -187,8 +196,12 @@
     /* ---- DESKTOP OVERRIDES ---- */
     @media (min-width: 600px) {
       #screen-setup { padding: 0; gap: 28px; }
-      .preset-card { flex: 0 1 auto; min-width: 130px; }
-      .presets-grid, .duration-row { width: auto; max-width: 520px; }
+    }
+    /* Wide enough for one row each — still a grid, so nothing is ever stranded */
+    @media (min-width: 780px) {
+      .section      { max-width: 760px; }
+      .presets-grid { grid-template-columns: repeat(4, 1fr); width: 100%; }
+      .duration-row { grid-template-columns: repeat(6, 1fr); width: min(720px, 100%); }
     }
 
     /* ---- SESSION ---- */
@@ -273,7 +286,7 @@
 <div class="screen" id="screen-setup">
   <h1 class="app-title">fire breath</h1>
 
-  <div>
+  <div class="section">
     <div class="section-label">pattern</div>
     <div class="presets-grid" id="presets-grid"></div>
   </div>
@@ -285,7 +298,7 @@
     <div class="phase-field"><label>Hold</label><input type="number" inputmode="numeric" id="ch2" min="0" max="60" value="4"></div>
   </div>
 
-  <div>
+  <div class="section">
     <div class="section-label">duration</div>
     <div class="duration-row" id="duration-row"></div>
   </div>
@@ -419,38 +432,53 @@ function computeP() {
 // Spacing = 10 vp; max holder half-width r=4 → 2 vp gap between adjacent holders.
 // drip: which outer edge carries a wax run (-1 left, 1 right, 0 none).
 const CANDLES = [
-  { xOff: -20, maxWax: 34, flicker: 0.07, holder: 'saucer',      highlight: 7, drip: -1 },
-  { xOff: -10, maxWax: 27, flicker: 0.13, holder: 'cup',         highlight: 4, drip:  1 },
-  { xOff:   0, maxWax: 40, flicker: 0.00, holder: 'candlestick', highlight: 9, drip:  0 },
-  { xOff:  10, maxWax: 29, flicker: 0.09, holder: 'bowl',        highlight: 3, drip:  1 },
-  { xOff:  20, maxWax: 23, flicker: 0.05, holder: 'cylinder',    highlight: 6, drip: -1 },
+  { xOff: -20, maxWax: 26, flicker: 0.07, holder: 'saucer',      highlight: 7, drip: -1 },
+  { xOff: -10, maxWax: 20, flicker: 0.13, holder: 'cup',         highlight: 4, drip:  1 },
+  { xOff:   0, maxWax: 31, flicker: 0.00, holder: 'candlestick', highlight: 9, drip:  0 },
+  { xOff:  10, maxWax: 22, flicker: 0.09, holder: 'bowl',        highlight: 3, drip:  1 },
+  { xOff:  20, maxWax: 17, flicker: 0.05, holder: 'cylinder',    highlight: 6, drip: -1 },
 ];
 const WAX_HW       = 2;   // wax half-width in virtual pixels (total 5 vp wide)
 const FLAME_MIN_PX = 3;
-const FLAME_MAX_PX = 22;
+const FLAME_MAX_PX = 24;  // flame outreaches the wax — it is the thing being watched
 
 const flickSeeds = CANDLES.map(() => Math.random() * 1000);
 
-// Warm limited palette
+// Warm limited palette.
+// The whole scene obeys one rule: the flame is the only light source, so
+// everything below it is graded by how much of that light it can catch.
 const PAL = {
-  // wax ramp: molten rim → lit face → body → shade → outline
-  waxRim:    '#f8ecc0',
-  waxLight:  '#f2dc96',
-  waxMid:    '#d3a349',
-  waxShade:  '#a87c30',
-  waxDark:   '#6e4d1d',
-  // flame ramp: core outward
-  flameCore: '#fff6d2',
-  flameHot:  '#ffd75e',
-  flameMid:  '#ff9820',
-  flameDeep: '#f05c0c',
-  flameEdge: '#bd3202',
-  flameBlue: '#454f92', // dim combustion blue at the flame root
-  wick:      '#1c1008',
-  ember:     '#7e3410',
-  // holder shades: specular, light, mid, dark
-  h0: '#9c6f38', h1: '#7a5228', h2: '#42281a', h3: '#1e100a',
+  // Flame ramp, hottest → coolest
+  flameCore: '#fff4cf',
+  flameHot:  '#ffc74a',
+  flameMid:  '#ff9022',
+  flameDeep: '#f2620e',
+  flameEdge: '#c03604',
+  wick:      '#191009',
+  ember:     '#a04a14',
+  // Molten rim of the wax pool — brightens as the flame grows
+  rimHot:    '#fff3cc',
+  rimWarm:   '#efd9a0',
+  rimCool:   '#c3aa71',
 };
+
+// Wax tones, band 0 nearest the flame falling to band 3 in shadow.
+// out = outline column · lit = highlight face · face = body · shade = turning edge
+const WAX_BANDS = [
+  { out: '#8a6529', lit: '#fff0c4', face: '#eaca80', shade: '#bb9046' },
+  { out: '#6d4b1e', lit: '#e9cd90', face: '#cfa759', shade: '#98702f' },
+  { out: '#523818', lit: '#c19c60', face: '#a37f3e', shade: '#74521f' },
+  { out: '#38250f', lit: '#8e6f3d', face: '#77592c', shade: '#523815' },
+];
+
+// Holder tones, picked by how much flame there is to light them. `side` runs
+// top-to-bottom within the holder so it turns under itself instead of reading
+// as a flat dark lump.
+const HOLD_BANDS = [
+  { spec: '#d29a4c', top: '#9c6d36', side: ['#6d4629', '#553321', '#3a2216'], edge: '#2e1a12', dark: '#180d07' },
+  { spec: '#a87740', top: '#7d5529', side: ['#553620', '#42281a', '#2c1a11'], edge: '#24140d', dark: '#130a05' },
+  { spec: '#805c2e', top: '#603f20', side: ['#412819', '#331e14', '#20130c'], edge: '#1a0d08', dark: '#0f0704' },
+];
 
 // ─── CANVAS ───────────────────────────────────────────────────────────────
 const canvas = document.getElementById('c');
@@ -505,7 +533,7 @@ function drawFrame() {
   // Box bounds in virtual-pixel coords (generous padding around the candle cluster)
   const boxL = cx_vp - 27;
   const boxR = cx_vp + 27;
-  const boxT = baseY_vp - 68;
+  const boxT = baseY_vp - 60;
   const boxB = baseY_vp + 11;
 
   // Smooth ambient glow drawn at full resolution underneath the pixel art
@@ -542,8 +570,8 @@ function drawFrame() {
     const waxH   = Math.max(0, Math.floor(def.maxWax * (1 - waxProg)));
     const waxTop = baseY_vp - waxH;
 
-    pixDrawHolder(cx, baseY_vp, def.holder);
-    if (waxH > 0) pixDrawWax(cx, waxTop, waxH, def);
+    pixDrawHolder(cx, baseY_vp, def.holder, flameT);
+    if (waxH > 0) pixDrawWax(cx, waxTop, waxH, def, flameT);
 
     // Per-candle flicker: multi-sine, amplitude from def.flicker (centre candle stays steady)
     const flick = (Math.sin(now * 6.7  + flickSeeds[i])       * 0.5
@@ -558,7 +586,8 @@ function drawFrame() {
 
     const fH = Math.max(0, Math.round((FLAME_MIN_PX + (FLAME_MAX_PX - FLAME_MIN_PX) * fT) * flameDieoutFactor));
     pixDrawWick(cx, waxTop, fH);
-    pixDrawFlame(cx, waxTop - 2, fH, now, flickSeeds[i], 0.5 + def.flicker * 5);
+    // baseY one row into the wick so the flame wraps its tip instead of floating
+    pixDrawFlame(cx, waxTop - 1, fH, now, flickSeeds[i], 0.8 + def.flicker * 8);
   });
 
   // Smoke particles
@@ -649,89 +678,129 @@ function px(x, y, color) {
 }
 
 // ── FLAME ─────────────────────────────────────────────────────────────────
-// Bottom-heavy pear: width ramps up from the tip (sin) to a peak ~82% down,
-// then pinches to the root (cos). The whole flame leans with a slow two-sine
-// sway, bending most at the tip — a candle licking the air rather than a
-// static sprite. Zones run core → hot → mid → deep → edge across each row;
-// the centre column is red at the tip, orange below, cream in the body.
+const FLAME_RAMP = [PAL.flameCore, PAL.flameHot, PAL.flameMid, PAL.flameDeep, PAL.flameEdge];
+
+// Silhouette: a teardrop. Zero at the tip, widest just below the middle, then
+// necking — not tapering to a point — where it meets the wick, so the flame
+// reads as attached to the candle rather than floating above it.
+function flameProfile(ft) {
+  const PEAK = 0.72, NECK = 0.44;
+  if (ft <= PEAK) return Math.sin((ft / PEAK) * (Math.PI / 2));
+  return 1 - (1 - NECK) * Math.pow((ft - PEAK) / (1 - PEAK), 1.45);
+}
+
+// Vertical heat: the tip is cool and smoky, the body burns hottest just below
+// the middle, and it cools again slightly at the neck. Combined with distance
+// from the axis this gives a heat field — quantising it puts the bright core
+// where a real flame keeps it (a blob low in the body) instead of running it
+// up the full height as a hard spine.
+function flameHeat(ft) {
+  const PEAK = 0.70;
+  if (ft < PEAK) return 0.24 + 0.76 * Math.pow(ft / PEAK, 1.35);
+  return 1 - 0.34 * Math.pow((ft - PEAK) / (1 - PEAK), 1.2);
+}
+
 function pixDrawFlame(cx, baseY, h, now, seed, swayAmp) {
   if (h < 1) return;
 
-  // Soft luminous halo behind the pixels; wax below catches the spill light
+  // Soft luminous halo behind the pixels; the wax below catches the spill
   const hf = h / FLAME_MAX_PX;
   const gx = (cx + 0.5) * P;
-  const gy = (baseY - h * 0.45) * P;
-  const gr = Math.max(1, h * P * 1.4);
+  const gy = (baseY - h * 0.55) * P;
+  const gr = Math.max(1, h * P * 1.6);
   const halo = ctx.createRadialGradient(gx, gy, 0, gx, gy, gr);
-  halo.addColorStop(0, `rgba(255,150,40,${0.05 + 0.06 * hf})`);
-  halo.addColorStop(1, 'rgba(255,150,40,0)');
+  halo.addColorStop(0,    `rgba(255,160,50,${0.06 + 0.09 * hf})`);
+  halo.addColorStop(0.45, `rgba(230,110,25,${0.03 + 0.04 * hf})`);
+  halo.addColorStop(1,    'rgba(255,150,40,0)');
   ctx.fillStyle = halo;
   ctx.fillRect(gx - gr, gy - gr, gr * 2, gr * 2);
 
-  const maxHW = Math.max(1, Math.round(h * 0.20));
-  const lean  = (Math.sin(now * 1.7 + seed) * 0.6 + Math.sin(now * 4.3 + seed * 2.3) * 0.4)
-              * swayAmp * Math.min(1, hf * 1.2);
+  // Below ~5vp there is no room for a silhouette; a single bright column
+  // reads as a guttering flame, where a 3-wide one reads as a plus sign.
+  // 0.17 keeps a full flame 9vp wide against the 10vp candle spacing; any wider
+  // and neighbouring flames touch, and the five candles read as one mass.
+  const maxHW = h < 5 ? 0 : Math.max(1, Math.round(h * 0.17));
+  // Slow two-sine lean; amplitude stays around a pixel so the flame breathes
+  // rather than thrashes — this is a calming app, not a campfire.
+  const lean = (Math.sin(now * 1.3 + seed) * 0.62 + Math.sin(now * 3.1 + seed * 2.3) * 0.38)
+             * swayAmp * Math.min(1, hf * 1.3);
 
   for (let row = 0; row < h; row++) {
     const ft = row / Math.max(h - 1, 1); // 0 = tip, 1 = root
-    const peakFt = 0.82;
-    const profile = ft <= peakFt
-      ? Math.sin((ft / peakFt) * (Math.PI / 2))
-      : Math.cos(((ft - peakFt) / (1 - peakFt)) * (Math.PI / 2));
-    let hw = Math.max(0, Math.round(maxHW * profile));
+    const hw = Math.max(0, Math.round(maxHW * flameProfile(ft)));
 
-    // Shimmer: occasionally shave the outermost pixel mid-flame
-    if (hw > 1 && ft > 0.1 && ft < 0.9 && Math.sin(now * 9.1 + seed * 2.1 + row * 1.8) > 0.5) {
-      hw--;
-    }
+    // Shimmer each edge on its own phase — a symmetric silhouette reads as an
+    // almond; independent edges keep it alive and organic.
+    const shim = hw > 1 && ft > 0.12 && ft < 0.82;
+    const hwL = shim && Math.sin(now * 8.3 + seed * 2.1 + row * 1.7) > 0.62 ? hw - 1 : hw;
+    const hwR = shim && Math.sin(now * 7.1 + seed * 3.3 + row * 1.4) > 0.62 ? hw - 1 : hw;
 
-    const bend = Math.round(lean * Math.pow(1 - ft, 1.8)); // tip bends, root stays anchored
+    const bend = Math.round(lean * Math.pow(1 - ft, 2.1)); // tip licks, root stays put
     const rcx  = cx + bend;
     const vy   = baseY - h + row;
+    const vh   = flameHeat(ft);
 
-    const coreColor = ft < 0.13 ? PAL.flameEdge
-                    : ft < 0.33 ? PAL.flameMid
-                    :             PAL.flameCore;
+    for (let dx = -hwL; dx <= hwR; dx++) {
+      const dr   = hw > 0 ? Math.abs(dx) / (hw + 0.01) : 0;
+      const heat = (1 - Math.pow(dr, 1.2)) * vh;
 
-    for (let dx = -hw; dx <= hw; dx++) {
-      const dr = hw > 0 ? Math.abs(dx) / (hw + 0.01) : 0;
-      let color;
-      if      (ft < 0.13)  color = dr < 0.6 ? coreColor : PAL.flameDeep;
-      else if (dr < 0.2)   color = coreColor;
-      else if (dr < 0.45)  color = PAL.flameHot;
-      else if (dr < 0.7)   color = PAL.flameMid;
-      else if (dr < 0.9)   color = PAL.flameDeep;
-      else                 color = PAL.flameEdge;
-      // Combustion blue fringing the root of a full flame
-      if (ft > 0.88 && h >= 9 && dr > 0.5) color = PAL.flameBlue;
-      px(rcx + dx, vy, color);
+      // Core threshold sits low enough that the bright centre holds a steady
+      // width over a long vertical run — raise it and the core pinches to a
+      // single column with one bulge, which reads as a cross, not a flame.
+      let idx = heat > 0.72 ? 0 : heat > 0.56 ? 1 : heat > 0.38 ? 2 : heat > 0.19 ? 3 : 4;
+      // Small flames never reach white — a guttering wick glows orange, not hot
+      if (h < 10) idx = Math.max(idx, 1);
+      if (h < 6)  idx = Math.max(idx, 2);
+
+      px(rcx + dx, vy, FLAME_RAMP[idx]);
     }
   }
 }
 
 // ── WAX ───────────────────────────────────────────────────────────────────
-// 5-vp cylinder: dark outline columns, lit face with a per-candle highlight
-// streak, a shade column before the right outline, molten rim on top with a
-// spilled lip, and a wax run down one outer edge ending in a bright bead.
-function pixDrawWax(cx, waxTop, waxH, def) {
+// 5-vp cylinder shaded by distance from the flame: bright at the molten rim,
+// sinking into shadow further down. The reach of that light scales with the
+// flame, so the candles visibly brighten as you inhale and dim as you exhale —
+// the wax carries the breath as much as the flame does.
+// Ordered dither so a band change reads as a soft gradient rather than a hard
+// horizontal seam banding the candle into segments.
+const BAYER2 = [[0.20, 0.70], [0.95, 0.45]];
+function waxBandAt(depth, step, col) {
+  const f = depth / step;
+  const b = Math.floor(f);
+  // Confine the checker to the last third of each band so the transition is
+  // stippled but the body of the band stays a clean, solid tone.
+  const i = (f - b) > 0.62 + BAYER2[col & 1][depth & 1] * 0.36 ? b + 1 : b;
+  return WAX_BANDS[Math.max(0, Math.min(WAX_BANDS.length - 1, i))];
+}
+
+function pixDrawWax(cx, waxTop, waxH, def, flameT) {
   const L = cx - WAX_HW;
   const R = cx + WAX_HW;
+  const step = Math.max(2.6, (4.5 + flameT * 11) / 1.7);
 
-  pxBlock(L,      waxTop, 1, waxH, PAL.waxDark);   // left outline
-  pxBlock(L + 1,  waxTop, 2, waxH, PAL.waxMid);    // lit face
-  pxBlock(cx + 1, waxTop, 1, waxH, PAL.waxShade);  // turning into shadow
-  pxBlock(R,      waxTop, 1, waxH, PAL.waxDark);   // right outline
+  for (let d = 0; d < waxH; d++) {
+    const y = waxTop + d;
+    px(L,      y, waxBandAt(d, step, L).out);
+    px(cx - 1, y, d < def.highlight ? waxBandAt(d, step, cx - 1).lit
+                                    : waxBandAt(d, step, cx - 1).face);
+    px(cx,     y, waxBandAt(d, step, cx).face);
+    px(cx + 1, y, waxBandAt(d, step, cx + 1).shade);
+    px(R,      y, waxBandAt(d, step, R).out);
+  }
 
-  if (waxH > 2) pxBlock(L + 1, waxTop + 1, 1, Math.min(waxH - 1, def.highlight), PAL.waxLight);
+  // Molten pool at the top, hotter the bigger the flame
+  const rim = flameT > 0.55 ? PAL.rimHot : flameT > 0.2 ? PAL.rimWarm : PAL.rimCool;
+  pxRow(L, waxTop, WAX_HW * 2 + 1, rim);
+  if (waxH > 3) px(cx + 1, waxTop + 1, rim);         // spills over the shade side
 
-  pxRow(L, waxTop, WAX_HW * 2 + 1, PAL.waxRim);    // molten pool rim
-  if (waxH > 3) px(cx + 1, waxTop + 1, PAL.waxRim); // rim spills over on the shade side
-
-  if (def.drip !== 0 && waxH > 5) {
-    const dx  = def.drip < 0 ? L : R;
-    const len = Math.min(2 + (def.highlight % 4), waxH - 2);
-    pxBlock(dx, waxTop + 1, 1, len, PAL.waxMid);
-    px(dx, waxTop + len, PAL.waxLight);            // bead at the tip of the run
+  // Wax run down one outer edge, ending in a bead — tinted to its own depth
+  if (def.drip !== 0 && waxH > 6) {
+    const dx    = def.drip < 0 ? L : R;
+    const start = 2;
+    const len   = Math.min(2 + (def.highlight % 4), waxH - start - 1);
+    for (let k = 0; k < len; k++) px(dx, waxTop + start + k, waxBandAt(start + k, step, dx).face);
+    px(dx, waxTop + start + len, waxBandAt(start + len, step, dx).lit);
   }
 }
 
@@ -758,22 +827,27 @@ const HOLDERS = {
   cylinder:    [[3,'t'],[3,'s'],[3,'s'],[3,'s'],[3,'s'],[3,'s'],[3,'s'],[3,'b']],
 };
 
-function pixDrawHolder(cx, baseY, type) {
+function pixDrawHolder(cx, baseY, type, flameT) {
   const rows = HOLDERS[type];
-  let prevR = 0;
+  const B    = HOLD_BANDS[flameT > 0.62 ? 0 : flameT > 0.25 ? 1 : 2];
+  let prevR  = 0;
   rows.forEach(([r, face], i) => {
     const y = baseY + i;
     if (face === 't') {
-      pxRow(cx - r, y, 2 * r + 1, PAL.h1);
-      px(cx - Math.max(0, r - 1), y, PAL.h0);           // specular on the lit face
+      pxRow(cx - r, y, 2 * r + 1, B.top);                 // upward face catches the flame
+      px(cx - Math.max(0, r - 1), y, B.spec);
+      if (r > 1) px(cx + r - 1, y, B.spec);
     } else if (face === 'b') {
-      pxRow(cx - r, y, 2 * r + 1, PAL.h3);
+      pxRow(cx - r, y, 2 * r + 1, B.dark);
     } else {
-      pxRow(cx - r, y, 2 * r + 1, PAL.h2);
-      px(cx - r, y, PAL.h3);                            // shadowed outer edges
-      px(cx + r, y, PAL.h3);
-      px(cx - r + 1, y, PAL.h1);                        // left highlight
-      if (r > prevR && i > 0) px(cx + r - 1, y, PAL.h1); // widening shoulder catches light
+      pxRow(cx - r, y, 2 * r + 1, B.side[Math.min(2, i >> 1)]); // turns under itself
+      px(cx - r, y, B.edge);                              // shadowed outer edges
+      px(cx + r, y, B.edge);
+      px(cx - r + 1, y, B.top);                           // left highlight
+      if (r > prevR && i > 0) {
+        px(cx + r - 1, y, B.top);                         // widening shoulder catches light
+        px(cx - r + 1, y, B.spec);                        // and its lit upper lip
+      }
     }
     prevR = r;
   });
