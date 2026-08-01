@@ -3,6 +3,13 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0907">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <title>Fire Breath</title>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -13,16 +20,28 @@
       --warm-bright: #f0b870;
       --warm-dim: #b07d3a;
       --text-muted: #8a6030;
+      --line: rgba(180,120,50,0.12);
+      --line-hover: rgba(180,120,50,0.3);
+      --line-active: rgba(180,120,50,0.45);
+      --fill-hover: rgba(180,120,50,0.07);
+      --fill-active: rgba(180,120,50,0.1);
     }
 
     html, body {
       height: 100%;
       height: 100dvh;
-      background: var(--bg);
+      background: radial-gradient(120% 90% at 50% 38%, #0d0a08 0%, var(--bg) 55%, #070503 100%);
       font-family: 'Georgia', 'Times New Roman', serif;
       color: var(--warm);
       overflow: hidden;
+      overscroll-behavior: none;   /* no pull-to-refresh / rubber-banding when installed */
       -webkit-tap-highlight-color: transparent;
+    }
+
+    button { touch-action: manipulation; }
+    button:focus-visible, .preset-card:focus-visible {
+      outline: 1px solid rgba(240,184,112,0.55);
+      outline-offset: 3px;
     }
 
     /* ---- SCREENS ---- */
@@ -50,9 +69,11 @@
       font-size: clamp(2rem, 7vw, 2.6rem);
       font-weight: 400;
       letter-spacing: 0.45em;
+      padding-left: 0.45em; /* recentre: letter-spacing adds a trailing gap */
       color: var(--warm-bright);
-      opacity: 0.75;
+      opacity: 0.78;
       margin-bottom: 4px;
+      text-shadow: 0 0 28px rgba(240,184,112,0.22);
     }
 
     .section-label {
@@ -62,6 +83,7 @@
       color: var(--text-muted);
       margin-bottom: 12px;
       text-align: center;
+      user-select: none;
     }
 
     .presets-grid {
@@ -74,19 +96,23 @@
 
     .preset-card {
       background: rgba(255,255,255,0.02);
-      border: 1px solid rgba(180,120,50,0.12);
+      border: 1px solid var(--line);
       border-radius: 12px;
       padding: 16px 20px;
       cursor: pointer;
-      transition: background 0.3s, border-color 0.3s;
+      transition: background 0.3s, border-color 0.3s, transform 0.3s;
       text-align: center;
       flex: 1 1 140px;
+      user-select: none;
     }
-    .preset-card:hover { background: rgba(180,120,50,0.07); border-color: rgba(180,120,50,0.3); }
-    .preset-card.active { background: rgba(180,120,50,0.1); border-color: rgba(180,120,50,0.45); }
+    .preset-card.active { background: var(--fill-active); border-color: var(--line-active); }
+    @media (hover: hover) {
+      .preset-card:hover { background: var(--fill-hover); border-color: var(--line-hover); transform: translateY(-2px); }
+      .preset-card.active:hover { background: var(--fill-active); }
+    }
 
     .preset-name { font-size: clamp(0.88rem, 3vw, 1rem); color: var(--warm-bright); margin-bottom: 4px; }
-    .preset-timing { font-size: clamp(0.7rem, 2.2vw, 0.78rem); font-family: monospace; color: var(--warm-dim); }
+    .preset-timing { font-size: clamp(0.7rem, 2.2vw, 0.78rem); font-family: monospace; letter-spacing: 0.08em; color: var(--warm-dim); }
     .preset-desc { font-size: clamp(0.65rem, 2vw, 0.72rem); color: var(--text-muted); margin-top: 6px; font-style: italic; }
 
     .custom-row {
@@ -123,7 +149,7 @@
 
     .dur-btn {
       background: rgba(255,255,255,0.02);
-      border: 1px solid rgba(180,120,50,0.12);
+      border: 1px solid var(--line);
       border-radius: 22px;
       padding: 10px 20px;
       cursor: pointer;
@@ -133,8 +159,8 @@
       transition: background 0.3s, border-color 0.3s, color 0.3s;
       min-height: 44px;
     }
-    .dur-btn:hover { background: rgba(180,120,50,0.07); color: var(--warm); }
-    .dur-btn.active { background: rgba(180,120,50,0.1); border-color: rgba(180,120,50,0.45); color: var(--warm-bright); }
+    .dur-btn:hover { background: var(--fill-hover); color: var(--warm); }
+    .dur-btn.active { background: var(--fill-active); border-color: var(--line-active); color: var(--warm-bright); }
 
     .begin-btn {
       background: transparent;
@@ -144,14 +170,19 @@
       color: var(--warm);
       font-size: clamp(0.9rem, 3vw, 1rem);
       letter-spacing: 0.28em;
+      padding-left: calc(56px + 0.28em);
       cursor: pointer;
       font-family: Georgia, serif;
-      transition: background 0.4s, border-color 0.4s;
+      transition: background 0.4s, border-color 0.4s, box-shadow 0.4s;
       margin-top: 4px;
       min-height: 56px;
     }
-    .begin-btn:hover { background: rgba(180,120,50,0.1); border-color: rgba(180,120,50,0.65); }
-    .begin-btn:disabled { opacity: 0.3; cursor: default; }
+    .begin-btn:hover {
+      background: var(--fill-active);
+      border-color: rgba(180,120,50,0.65);
+      box-shadow: 0 0 28px rgba(212,146,74,0.14);
+    }
+    .begin-btn:disabled { opacity: 0.3; cursor: default; box-shadow: none; }
 
     /* ---- DESKTOP OVERRIDES ---- */
     @media (min-width: 600px) {
@@ -182,7 +213,7 @@
     .ctrl {
       background: none;
       border: none;
-      color: rgba(180,120,50,0.22);
+      color: rgba(180,120,50,0.26);
       cursor: pointer;
       font-size: clamp(0.75rem, 2.5vw, 0.9rem);
       letter-spacing: 0.18em;
@@ -200,7 +231,7 @@
       right: max(26px, env(safe-area-inset-right));
       background: none;
       border: none;
-      color: rgba(180,120,50,0.18);
+      color: rgba(180,120,50,0.2);
       cursor: pointer;
       font-size: clamp(0.62rem, 2vw, 0.7rem);
       letter-spacing: 0.15em;
@@ -212,18 +243,26 @@
 
     /* ---- COMPLETE ---- */
     #screen-complete { gap: 20px; }
-    .done-msg { font-size: 1rem; letter-spacing: 0.3em; color: var(--warm); opacity: 0.5; }
+    .done-msg {
+      font-size: clamp(1rem, 3.5vw, 1.15rem);
+      letter-spacing: 0.32em;
+      padding-left: 0.32em;
+      color: var(--warm-bright);
+      opacity: 0.55;
+      text-shadow: 0 0 22px rgba(240,184,112,0.25);
+    }
     .again-btn {
       background: transparent;
       border: 1px solid rgba(180,120,50,0.18);
       border-radius: 20px;
-      padding: 9px 26px;
+      padding: 11px 28px;
+      min-height: 44px;
       color: var(--text-muted);
-      font-size: 0.7rem;
+      font-size: 0.72rem;
       letter-spacing: 0.18em;
       cursor: pointer;
       font-family: Georgia, serif;
-      transition: all 0.35s;
+      transition: border-color 0.35s, color 0.35s;
     }
     .again-btn:hover { border-color: rgba(180,120,50,0.4); color: var(--warm); }
   </style>
@@ -240,10 +279,10 @@
   </div>
 
   <div class="custom-row collapsed" id="custom-row">
-    <div class="phase-field"><label>Inhale</label><input type="number" id="ci" min="0" max="60" value="4"></div>
-    <div class="phase-field"><label>Hold</label><input type="number" id="ch1" min="0" max="60" value="4"></div>
-    <div class="phase-field"><label>Exhale</label><input type="number" id="ce" min="0" max="60" value="4"></div>
-    <div class="phase-field"><label>Hold</label><input type="number" id="ch2" min="0" max="60" value="4"></div>
+    <div class="phase-field"><label>Inhale</label><input type="number" inputmode="numeric" id="ci" min="0" max="60" value="4"></div>
+    <div class="phase-field"><label>Hold</label><input type="number" inputmode="numeric" id="ch1" min="0" max="60" value="4"></div>
+    <div class="phase-field"><label>Exhale</label><input type="number" inputmode="numeric" id="ce" min="0" max="60" value="4"></div>
+    <div class="phase-field"><label>Hold</label><input type="number" inputmode="numeric" id="ch2" min="0" max="60" value="4"></div>
   </div>
 
   <div>
@@ -378,14 +417,15 @@ function computeP() {
 
 // Candle positions in virtual-pixel units (xOff from grid center).
 // Spacing = 10 vp; max holder half-width r=4 → 2 vp gap between adjacent holders.
+// drip: which outer edge carries a wax run (-1 left, 1 right, 0 none).
 const CANDLES = [
-  { xOff: -20, maxWax: 34, flicker: 0.07, holder: 'saucer',      highlight: 7 },
-  { xOff: -10, maxWax: 27, flicker: 0.13, holder: 'cup',         highlight: 4 },
-  { xOff:   0, maxWax: 40, flicker: 0.00, holder: 'candlestick', highlight: 9 },
-  { xOff:  10, maxWax: 29, flicker: 0.09, holder: 'bowl',        highlight: 3 },
-  { xOff:  20, maxWax: 23, flicker: 0.05, holder: 'cylinder',    highlight: 6 },
+  { xOff: -20, maxWax: 34, flicker: 0.07, holder: 'saucer',      highlight: 7, drip: -1 },
+  { xOff: -10, maxWax: 27, flicker: 0.13, holder: 'cup',         highlight: 4, drip:  1 },
+  { xOff:   0, maxWax: 40, flicker: 0.00, holder: 'candlestick', highlight: 9, drip:  0 },
+  { xOff:  10, maxWax: 29, flicker: 0.09, holder: 'bowl',        highlight: 3, drip:  1 },
+  { xOff:  20, maxWax: 23, flicker: 0.05, holder: 'cylinder',    highlight: 6, drip: -1 },
 ];
-const WAX_HW       = 2;   // wax half-width in virtual pixels (total 4 vp wide)
+const WAX_HW       = 2;   // wax half-width in virtual pixels (total 5 vp wide)
 const FLAME_MIN_PX = 3;
 const FLAME_MAX_PX = 22;
 
@@ -393,16 +433,23 @@ const flickSeeds = CANDLES.map(() => Math.random() * 1000);
 
 // Warm limited palette
 const PAL = {
-  waxLight:   '#f2e0a0',
-  waxMid:     '#c89438',
-  waxDark:    '#7a5620',
-  waxTop:     '#ecd068',
-  flameCore:  '#fffac8',
-  flameInner: '#ffc028',
-  flameMid:   '#ff7c0c',
-  flameOuter: '#c83400',
-  wick:       '#1c1008',
-  h1: '#7a5228', h2: '#42281a', h3: '#1e100a', // holder shades: light, mid, dark
+  // wax ramp: molten rim → lit face → body → shade → outline
+  waxRim:    '#f8ecc0',
+  waxLight:  '#f2dc96',
+  waxMid:    '#d3a349',
+  waxShade:  '#a87c30',
+  waxDark:   '#6e4d1d',
+  // flame ramp: core outward
+  flameCore: '#fff6d2',
+  flameHot:  '#ffd75e',
+  flameMid:  '#ff9820',
+  flameDeep: '#f05c0c',
+  flameEdge: '#bd3202',
+  flameBlue: '#454f92', // dim combustion blue at the flame root
+  wick:      '#1c1008',
+  ember:     '#7e3410',
+  // holder shades: specular, light, mid, dark
+  h0: '#9c6f38', h1: '#7a5228', h2: '#42281a', h3: '#1e100a',
 };
 
 // ─── CANVAS ───────────────────────────────────────────────────────────────
@@ -417,10 +464,10 @@ function resizeCanvas() {
 resizeCanvas();
 window.addEventListener('resize', resizeCanvas);
 
-let engine    = null;
-let rafId     = null;
-let dieout          = false;
-let dieoutTs        = 0;
+let engine   = null;
+let rafId    = null;
+let dieout   = false;
+let dieoutTs = 0;
 let smokeParticles = [];
 const DIEOUT_DUR = 3000; // ms for candles to extinguish + smoke to clear
 
@@ -436,9 +483,9 @@ function drawFrame() {
   ctx.clearRect(0, 0, W, H);
   ctx.imageSmoothingEnabled = false;
 
-  const state  = engine.getState();
-  const now    = performance.now() / 1000;
-  let   flameT = state.flameT;
+  const state   = engine.getState();
+  const now     = performance.now() / 1000;
+  let   flameT  = state.flameT;
   const waxProg = state.sessionProg;
 
   let dieoutFactor      = 1;
@@ -462,14 +509,26 @@ function drawFrame() {
   const boxB = baseY_vp + 11;
 
   // Smooth ambient glow drawn at full resolution underneath the pixel art
-  const glowR  = 0.04 + flameT * 0.09;
+  const glowA  = 0.04 + flameT * 0.09;
   const glowCY = (baseY_vp - 14) * P;
   const glow   = ctx.createRadialGradient(W / 2, glowCY, 0, W / 2, glowCY, Math.min(W, H) * 0.52);
-  glow.addColorStop(0,   `rgba(210,115,25,${glowR})`);
-  glow.addColorStop(0.5, `rgba(150,70,10,${glowR * 0.4})`);
+  glow.addColorStop(0,   `rgba(210,115,25,${glowA})`);
+  glow.addColorStop(0.5, `rgba(150,70,10,${glowA * 0.4})`);
   glow.addColorStop(1,   'rgba(0,0,0,0)');
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, W, H);
+
+  // Floor light pool: flattened radial ellipse beneath the holders grounds the cluster
+  const poolY = (baseY_vp + 8) * P;
+  ctx.save();
+  ctx.translate(W / 2, poolY);
+  ctx.scale(1, 0.26);
+  const pool = ctx.createRadialGradient(0, 0, 0, 0, 0, 34 * P);
+  pool.addColorStop(0, `rgba(220,130,35,${0.04 + flameT * 0.06})`);
+  pool.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = pool;
+  ctx.fillRect(-34 * P, -34 * P, 68 * P, 68 * P);
+  ctx.restore();
 
   // Subtle 1-vp rectangular outline around the candle cluster
   ctx.fillStyle = `rgba(180,110,40,${0.22 * dieoutFactor})`;
@@ -479,17 +538,18 @@ function drawFrame() {
   ctx.fillRect(boxR * P, boxT * P, P, (boxB - boxT + 1) * P);           // right edge
 
   CANDLES.forEach((def, i) => {
-    const cx   = cx_vp + def.xOff;
-    const waxH = Math.max(0, Math.floor(def.maxWax * (1 - waxProg)));
+    const cx     = cx_vp + def.xOff;
+    const waxH   = Math.max(0, Math.floor(def.maxWax * (1 - waxProg)));
     const waxTop = baseY_vp - waxH;
 
     pixDrawHolder(cx, baseY_vp, def.holder);
-    if (waxH > 0) pixDrawWax(cx, waxTop, waxH, def.highlight);
-    pixDrawWick(cx, waxTop);
+    if (waxH > 0) pixDrawWax(cx, waxTop, waxH, def);
 
-    const flick = Math.sin(now * 6.7  + flickSeeds[i]) * 0.05
-                + Math.sin(now * 11.3 + flickSeeds[i] * 1.7) * 0.025
-                + Math.sin(now * 3.1  + flickSeeds[i] * 0.8) * 0.03;
+    // Per-candle flicker: multi-sine, amplitude from def.flicker (centre candle stays steady)
+    const flick = (Math.sin(now * 6.7  + flickSeeds[i])       * 0.5
+                 + Math.sin(now * 11.3 + flickSeeds[i] * 1.7) * 0.25
+                 + Math.sin(now * 3.1  + flickSeeds[i] * 0.8) * 0.25)
+                 * (0.035 + def.flicker * 0.55);
 
     let fT = flameT;
     if (state.phase === 'holdTop' || state.phase === 'holdBottom') {
@@ -497,7 +557,8 @@ function drawFrame() {
     }
 
     const fH = Math.max(0, Math.round((FLAME_MIN_PX + (FLAME_MAX_PX - FLAME_MIN_PX) * fT) * flameDieoutFactor));
-    pixDrawFlame(cx, waxTop - 2, fH, now, flickSeeds[i]);
+    pixDrawWick(cx, waxTop, fH);
+    pixDrawFlame(cx, waxTop - 2, fH, now, flickSeeds[i], 0.5 + def.flicker * 5);
   });
 
   // Smoke particles
@@ -562,7 +623,6 @@ function drawSmoke(now) {
   for (const p of smokeParticles) {
     p.x  += p.vx + Math.sin(now * p.driftFreq + p.driftPhase) * 0.02;
     p.y  += p.vy;
-    p.vy *= 1;
     p.age++;
     const lifeFrac = p.age / p.maxAge;
     const shimmer  = 0.5 + 0.5 * Math.sin(now * p.shimmerFreq + p.shimmerPhase);
@@ -583,142 +643,140 @@ function pxBlock(x, y, w, h, color) {
   ctx.fillStyle = color;
   ctx.fillRect(x * P, y * P, w * P, h * P);
 }
+function px(x, y, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x * P, y * P, P, P);
+}
 
-// Flame: pear profile built row-by-row in virtual pixels.
-// ft^1.7 shifts the widest point ~65% down from tip → bottom-heavy pear, not oval.
-// Individual edge pixels randomly drop each frame for authentic shimmer.
-function pixDrawFlame(cx, baseY, h, now, seed) {
+// ── FLAME ─────────────────────────────────────────────────────────────────
+// Bottom-heavy pear: width ramps up from the tip (sin) to a peak ~82% down,
+// then pinches to the root (cos). The whole flame leans with a slow two-sine
+// sway, bending most at the tip — a candle licking the air rather than a
+// static sprite. Zones run core → hot → mid → deep → edge across each row;
+// the centre column is red at the tip, orange below, cream in the body.
+function pixDrawFlame(cx, baseY, h, now, seed, swayAmp) {
   if (h < 1) return;
+
+  // Soft luminous halo behind the pixels; wax below catches the spill light
+  const hf = h / FLAME_MAX_PX;
+  const gx = (cx + 0.5) * P;
+  const gy = (baseY - h * 0.45) * P;
+  const gr = Math.max(1, h * P * 1.4);
+  const halo = ctx.createRadialGradient(gx, gy, 0, gx, gy, gr);
+  halo.addColorStop(0, `rgba(255,150,40,${0.05 + 0.06 * hf})`);
+  halo.addColorStop(1, 'rgba(255,150,40,0)');
+  ctx.fillStyle = halo;
+  ctx.fillRect(gx - gr, gy - gr, gr * 2, gr * 2);
+
   const maxHW = Math.max(1, Math.round(h * 0.20));
+  const lean  = (Math.sin(now * 1.7 + seed) * 0.6 + Math.sin(now * 4.3 + seed * 2.3) * 0.4)
+              * swayAmp * Math.min(1, hf * 1.2);
+
   for (let row = 0; row < h; row++) {
-    const ft = row / Math.max(h - 1, 1); // 0 = tip, 1 = base
+    const ft = row / Math.max(h - 1, 1); // 0 = tip, 1 = root
     const peakFt = 0.82;
     const profile = ft <= peakFt
       ? Math.sin((ft / peakFt) * (Math.PI / 2))
       : Math.cos(((ft - peakFt) / (1 - peakFt)) * (Math.PI / 2));
-    let hw = Math.round(maxHW * profile);
-    hw = Math.max(0, hw);
-    // Shimmer: stochastically drop the outermost pixel on some rows/frames
-    if (hw > 0 && ft > 0.08 && ft < 0.94 && Math.sin(now * 9.1 + seed * 2.1 + row * 1.8) > 0.42) {
-      hw = Math.max(0, hw - 1);
+    let hw = Math.max(0, Math.round(maxHW * profile));
+
+    // Shimmer: occasionally shave the outermost pixel mid-flame
+    if (hw > 1 && ft > 0.1 && ft < 0.9 && Math.sin(now * 9.1 + seed * 2.1 + row * 1.8) > 0.5) {
+      hw--;
     }
-    const vy = baseY - h + row;
-    const coreColor = ft < 0.13 ? PAL.flameOuter
+
+    const bend = Math.round(lean * Math.pow(1 - ft, 1.8)); // tip bends, root stays anchored
+    const rcx  = cx + bend;
+    const vy   = baseY - h + row;
+
+    const coreColor = ft < 0.13 ? PAL.flameEdge
                     : ft < 0.33 ? PAL.flameMid
-                    :              PAL.flameCore;
+                    :             PAL.flameCore;
+
     for (let dx = -hw; dx <= hw; dx++) {
       const dr = hw > 0 ? Math.abs(dx) / (hw + 0.01) : 0;
       let color;
-      if      (ft < 0.13)  color = dr < 0.6  ? coreColor      : PAL.flameInner;
-      else if (dr < 0.22)  color = coreColor;
-      else if (dr < 0.56)  color = PAL.flameInner;
-      else if (dr < 0.82)  color = PAL.flameMid;
-      else                 color = PAL.flameOuter;
-      ctx.fillStyle = color;
-      ctx.fillRect((cx + dx) * P, vy * P, P, P);
+      if      (ft < 0.13)  color = dr < 0.6 ? coreColor : PAL.flameDeep;
+      else if (dr < 0.2)   color = coreColor;
+      else if (dr < 0.45)  color = PAL.flameHot;
+      else if (dr < 0.7)   color = PAL.flameMid;
+      else if (dr < 0.9)   color = PAL.flameDeep;
+      else                 color = PAL.flameEdge;
+      // Combustion blue fringing the root of a full flame
+      if (ft > 0.88 && h >= 9 && dr > 0.5) color = PAL.flameBlue;
+      px(rcx + dx, vy, color);
     }
   }
 }
 
-function pixDrawWax(cx, waxTop, waxH, highlight) {
-  pxBlock(cx - WAX_HW,         waxTop, 1,               waxH, PAL.waxDark);
-  pxBlock(cx - WAX_HW + 1,     waxTop, WAX_HW * 2 - 1,  waxH, PAL.waxMid);
-  pxBlock(cx + WAX_HW - 0,     waxTop, 1,               waxH, PAL.waxDark);
-  if (waxH > 2) pxBlock(cx - WAX_HW + 1, waxTop + 1, 1, Math.min(waxH - 1, highlight), PAL.waxLight);
-  pxRow(cx - WAX_HW, waxTop, WAX_HW * 2.5, PAL.waxTop);
-}
+// ── WAX ───────────────────────────────────────────────────────────────────
+// 5-vp cylinder: dark outline columns, lit face with a per-candle highlight
+// streak, a shade column before the right outline, molten rim on top with a
+// spilled lip, and a wax run down one outer edge ending in a bright bead.
+function pixDrawWax(cx, waxTop, waxH, def) {
+  const L = cx - WAX_HW;
+  const R = cx + WAX_HW;
 
-function pixDrawWick(cx, waxTop) {
-  ctx.fillStyle = PAL.wick;
-  ctx.fillRect(cx * P, (waxTop - 2) * P, P, 2 * P);
-}
+  pxBlock(L,      waxTop, 1, waxH, PAL.waxDark);   // left outline
+  pxBlock(L + 1,  waxTop, 2, waxH, PAL.waxMid);    // lit face
+  pxBlock(cx + 1, waxTop, 1, waxH, PAL.waxShade);  // turning into shadow
+  pxBlock(R,      waxTop, 1, waxH, PAL.waxDark);   // right outline
 
-// ── Holder row helpers ────────────────────────────────────────────────────
-// r = radius: row spans cx−r … cx+r, total width 2r+1 (always odd, always centred).
-// topRow  — flat lit top face (solid h1)
-// shRow   — cylindrical side face: dark outer edges, h1 highlight, h2 fill
-// botRow  — bottom face in shadow (solid h3)
-function topRow(cx, y, r) {
-  pxRow(cx - r, y, 2 * r + 1, PAL.h1);
-}
-function shRow(cx, y, r) {
-  pxRow(cx - r, y, 2 * r + 1, PAL.h2);
-  ctx.fillStyle = PAL.h3;
-  ctx.fillRect((cx - r)     * P, y * P, P, P);
-  ctx.fillRect((cx + r)     * P, y * P, P, P);
-  ctx.fillStyle = PAL.h1;
-  ctx.fillRect((cx - r + 1) * P, y * P, P, P);
-}
-function botRow(cx, y, r) {
-  pxRow(cx - r, y, 2 * r + 1, PAL.h3);
-}
+  if (waxH > 2) pxBlock(L + 1, waxTop + 1, 1, Math.min(waxH - 1, def.highlight), PAL.waxLight);
 
-// All five holders are exactly 8 rows tall (rows 0–7 below baseY) → flat even base.
-// Candle spacing = 10 vp; max r = 4 (9 vp wide) → 2 vp gap between adjacent holders.
-function pixDrawHolder(cx, baseY, type) {
-  const b = baseY;
-  switch (type) {
+  pxRow(L, waxTop, WAX_HW * 2 + 1, PAL.waxRim);    // molten pool rim
+  if (waxH > 3) px(cx + 1, waxTop + 1, PAL.waxRim); // rim spills over on the shade side
 
-    case 'saucer':
-      // Broad flat disc: opens to full width on row 1, gentle taper at base
-      topRow(cx, b,     2);
-      shRow (cx, b + 1, 4);
-      shRow (cx, b + 2, 4);
-      shRow (cx, b + 3, 4);
-      shRow (cx, b + 4, 4);
-      shRow (cx, b + 5, 3);
-      shRow (cx, b + 6, 2);
-      botRow(cx, b + 7, 2);
-      break;
-
-    case 'cup':
-      // Goblet: narrow mouth → widens → tight waist → flares to foot
-      topRow(cx, b,     2);
-      shRow (cx, b + 1, 3);
-      shRow (cx, b + 2, 4);
-      shRow (cx, b + 3, 2);
-      shRow (cx, b + 4, 2);
-      shRow (cx, b + 5, 3);
-      shRow (cx, b + 6, 4);
-      botRow(cx, b + 7, 4);
-      break;
-
-    case 'candlestick':
-      // Collar → narrow stem → sudden wide foot (most dramatic silhouette)
-      topRow(cx, b,     2);
-      shRow (cx, b + 1, 3);
-      shRow (cx, b + 2, 2);
-      shRow (cx, b + 3, 1);
-      shRow (cx, b + 4, 1);
-      shRow (cx, b + 5, 1);
-      topRow(cx, b + 6, 4);  // foot top face — lit flat surface
-      botRow(cx, b + 7, 4);
-      break;
-
-    case 'bowl':
-      // Shallow wide bowl: opens immediately to full width, stays wide
-      topRow(cx, b,     2);
-      topRow(cx, b + 1, 4);  // broad rim top — shows full breadth at once
-      shRow (cx, b + 2, 4);
-      shRow (cx, b + 3, 4);
-      shRow (cx, b + 4, 4);
-      shRow (cx, b + 5, 3);
-      shRow (cx, b + 6, 2);
-      botRow(cx, b + 7, 2);
-      break;
-
-    case 'cylinder':
-      // Straight-sided sleeve: perfectly uniform, tallest presence
-      topRow(cx, b,     3);
-      shRow (cx, b + 1, 3);
-      shRow (cx, b + 2, 3);
-      shRow (cx, b + 3, 3);
-      shRow (cx, b + 4, 3);
-      shRow (cx, b + 5, 3);
-      shRow (cx, b + 6, 3);
-      botRow(cx, b + 7, 3);
-      break;
+  if (def.drip !== 0 && waxH > 5) {
+    const dx  = def.drip < 0 ? L : R;
+    const len = Math.min(2 + (def.highlight % 4), waxH - 2);
+    pxBlock(dx, waxTop + 1, 1, len, PAL.waxMid);
+    px(dx, waxTop + len, PAL.waxLight);            // bead at the tip of the run
   }
+}
+
+function pixDrawWick(cx, waxTop, fH) {
+  pxBlock(cx, waxTop - 2, 1, 2, PAL.wick);
+  if (fH >= 3) px(cx, waxTop - 2, PAL.ember); // wick tip glows while lit
+}
+
+// ── HOLDERS ───────────────────────────────────────────────────────────────
+// Data-driven silhouettes: 8 rows below baseY, each [radius, face]. Faces:
+// 't' lit top surface, 's' cylindrical side, 'b' bottom in shadow. Every
+// base sits flat at baseY+7. Side rows get dark outer edges and a left
+// highlight; where the silhouette widens, the exposed shoulder catches light.
+const HOLDERS = {
+  // Broad flat disc: opens to full width, gentle taper at base
+  saucer:      [[2,'t'],[4,'s'],[4,'s'],[4,'s'],[4,'s'],[3,'s'],[2,'s'],[2,'b']],
+  // Goblet: narrow mouth → widens → tight waist → flares to foot
+  cup:         [[2,'t'],[3,'s'],[4,'s'],[2,'s'],[2,'s'],[3,'s'],[4,'s'],[4,'b']],
+  // Collar → narrow stem → sudden wide foot (most dramatic silhouette)
+  candlestick: [[2,'t'],[3,'s'],[2,'s'],[1,'s'],[1,'s'],[1,'s'],[4,'t'],[4,'b']],
+  // Shallow wide bowl: broad lit rim, stays wide
+  bowl:        [[2,'t'],[4,'t'],[4,'s'],[4,'s'],[4,'s'],[3,'s'],[2,'s'],[2,'b']],
+  // Straight-sided sleeve: perfectly uniform, tallest presence
+  cylinder:    [[3,'t'],[3,'s'],[3,'s'],[3,'s'],[3,'s'],[3,'s'],[3,'s'],[3,'b']],
+};
+
+function pixDrawHolder(cx, baseY, type) {
+  const rows = HOLDERS[type];
+  let prevR = 0;
+  rows.forEach(([r, face], i) => {
+    const y = baseY + i;
+    if (face === 't') {
+      pxRow(cx - r, y, 2 * r + 1, PAL.h1);
+      px(cx - Math.max(0, r - 1), y, PAL.h0);           // specular on the lit face
+    } else if (face === 'b') {
+      pxRow(cx - r, y, 2 * r + 1, PAL.h3);
+    } else {
+      pxRow(cx - r, y, 2 * r + 1, PAL.h2);
+      px(cx - r, y, PAL.h3);                            // shadowed outer edges
+      px(cx + r, y, PAL.h3);
+      px(cx - r + 1, y, PAL.h1);                        // left highlight
+      if (r > prevR && i > 0) px(cx + r - 1, y, PAL.h1); // widening shoulder catches light
+    }
+    prevR = r;
+  });
 }
 
 // ─── AUDIO ─────────────────────────────────────────────────────────────────
@@ -793,7 +851,7 @@ function buildPresets() {
     el.className = 'preset-card' + (pr === selPreset ? ' active' : '');
     el.innerHTML = `
       <div class="preset-name">${pr.name}</div>
-      <div class="preset-timing">${pr.p.join(' – ')}</div>
+      <div class="preset-timing">${pr.p.join(' · ')}</div>
       <div class="preset-desc">${pr.desc}</div>
     `;
     el.addEventListener('click', () => {
@@ -856,6 +914,38 @@ function showScreen(name) {
   });
 }
 
+function setSessionControlsVisible(visible) {
+  document.querySelector('.session-ui').style.display = visible ? '' : 'none';
+  document.getElementById('sound-btn').style.display  = visible ? '' : 'none';
+}
+
+function beginDieout(extraDelayMs) {
+  dieout   = true;
+  dieoutTs = performance.now();
+  setSessionControlsVisible(false);
+  releaseWakeLock();
+  setTimeout(() => showScreen('complete'), DIEOUT_DUR + extraDelayMs);
+}
+
+// ─── WAKE LOCK ─────────────────────────────────────────────────────────────
+// Keep the screen on during a session — a breathing exercise shouldn't be
+// interrupted by the phone dimming and locking.
+let wakeLock = null;
+
+async function acquireWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try { wakeLock = await navigator.wakeLock.request('screen'); } catch (e) { /* low battery etc. */ }
+}
+
+function releaseWakeLock() {
+  if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
+}
+
+// The lock is auto-released when the tab is backgrounded; re-acquire on return
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && engine && !engine.done) acquireWakeLock();
+});
+
 // ─── SESSION ───────────────────────────────────────────────────────────────
 function startSession() {
   if (selPreset.id === 'custom') syncCustom();
@@ -870,20 +960,16 @@ function startSession() {
     totalSec = cycles * cl;
   }
 
-  engine  = new BreathEngine(pattern, totalSec);
+  engine = new BreathEngine(pattern, totalSec);
   dieout = false;
   smokeParticles = [];
+  setSessionControlsVisible(true);
 
-  engine.onDone = () => {
-    dieout   = true;
-    dieoutTs = performance.now();
-    document.querySelector('.session-ui').style.display = 'none';
-    document.getElementById('sound-btn').style.display  = 'none';
-    setTimeout(() => showScreen('complete'), DIEOUT_DUR + 1200);
-  };
+  engine.onDone = () => beginDieout(1200);
 
   resizeCanvas();
   showScreen('session');
+  acquireWakeLock();
   if (soundOn) setSound(true);
 
   engine.start();
@@ -907,13 +993,12 @@ document.getElementById('pause-btn').addEventListener('click', () => {
 });
 
 document.getElementById('stop-btn').addEventListener('click', () => {
-  if (engine) { engine.stop(); }
+  if (!engine) return;
+  engine.resume(); // clear any pause so the dieout plays unobscured
+  engine.stop();
+  document.getElementById('pause-btn').textContent = 'pause';
   setSound(false);
-  dieout   = true;
-  dieoutTs = performance.now();
-  document.querySelector('.session-ui').style.display = 'none';
-  document.getElementById('sound-btn').style.display  = 'none';
-  setTimeout(() => showScreen('complete'), DIEOUT_DUR + 1100);
+  beginDieout(1100);
 });
 
 document.getElementById('sound-btn').addEventListener('click', () => {
@@ -931,6 +1016,13 @@ document.getElementById('again-btn').addEventListener('click', () => {
   buildDurations();
   showScreen('setup');
 });
+
+// ─── SERVICE WORKER ────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>
